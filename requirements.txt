@@ -1,0 +1,32 @@
+# ========== Web Framework ==========
+fastapi>=0.141.1
+uvicorn[standard]>=0.52.4
+python-multipart>=0.0.32
+
+# ========== Database ==========
+sqlalchemy[asyncio]>=2.0.52
+alembic>=1.19.1
+asyncmy>=0.2.9
+pymysql>=1.1.1
+chromadb>=0.6.0
+
+# ========== Utils ==========
+pydantic>=2.13.5
+pydantic-settings>=2.15.0
+python-dotenv>=1.2.3
+pyyaml>=6.0.3
+
+# ========== Auth & Security ==========
+passlib[bcrypt]>=1.7.4
+bcrypt>=4.0.0,<5.0.0
+cryptography>=42.0.0
+
+# ========== AI / LLM / Embedding ==========
+openai>=1.40.0
+sentence-transformers>=3.0.0
+torch>=2.0.0
+
+# ========== 文档解析 ==========
+pypdf>=4.0.0
+python-docx>=1.1.0
+openpyxl>=3.1.0

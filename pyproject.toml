@@ -1,0 +1,27 @@
+[project]
+name = "rag-chat"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.19.1",
+    "asyncmy>=0.2.9",
+    "bcrypt>=4.0.0,<5.0.0",
+    "chromadb>=0.6.0",
+    "cryptography>=42.0.0",
+    "fastapi>=0.141.1",
+    "openai>=1.40.0",
+    "passlib[bcrypt]>=1.7.4",
+    "pymysql>=1.1.1",
+    "pydantic>=2.13.5",
+    "pydantic-settings>=2.15.0",
+    "python-docx>=1.1.0",
+    "python-dotenv>=1.2.3",
+    "python-multipart>=0.0.32",
+    "pypdf>=4.0.0",
+    "pyyaml>=6.0.3",
+    "sqlalchemy[asyncio]>=2.0.52",
+    "uvicorn[standard]>=0.52.4",
+    "openpyxl>=3.1.5",
+    "torch>=2.14.0",
+    "sentence-transformers>=6.0.1",
+]

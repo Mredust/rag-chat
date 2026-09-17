@@ -1,0 +1,173 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', Roboto, sans-serif;
+  background-color: #f8fafc;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 统一下拉框样式：移除原生外观，补充自定义箭头，并显式指定文本/背景色避免不可见 */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-color: #ffffff;
+  color: #334155;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%2364748b' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 1.25em;
+  padding-right: 2.5rem;
+}
+
+/* 下拉选项列表：显式背景与文字色，避免白底白字不可见 */
+select option {
+  background-color: #ffffff;
+  color: #334155;
+  font-size: 14px;
+  padding: 6px 10px;
+}
+
+/* 选中/悬停态提示（Firefox/较新 Chromium 生效） */
+select option:hover,
+select option:checked {
+  background-color: #eef2ff;
+  color: #4338ca;
+}
+
+/* Markdown 渲染样式 */
+.markdown-body {
+  line-height: 1.7;
+  word-break: break-word;
+}
+
+.markdown-body :first-child {
+  margin-top: 0;
+}
+
+.markdown-body :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4 {
+  font-weight: 600;
+  margin: 0.8em 0 0.4em;
+}
+
+.markdown-body h1 {
+  font-size: 1.4em;
+}
+
+.markdown-body h2 {
+  font-size: 1.25em;
+}
+
+.markdown-body h3 {
+  font-size: 1.1em;
+}
+
+.markdown-body p {
+  margin: 0.4em 0;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 1.4em;
+  margin: 0.4em 0;
+}
+
+.markdown-body ul {
+  list-style: disc;
+}
+
+.markdown-body ol {
+  list-style: decimal;
+}
+
+.markdown-body li {
+  margin: 0.2em 0;
+}
+
+.markdown-body code {
+  background: #f1f5f9;
+  padding: 0.15em 0.35em;
+  border-radius: 0.25em;
+  font-size: 0.9em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.markdown-body pre {
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 0.75em 1em;
+  border-radius: 0.5em;
+  overflow-x: auto;
+  margin: 0.6em 0;
+}
+
+.markdown-body pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+}
+
+.markdown-body blockquote {
+  border-left: 3px solid #cbd5e1;
+  padding-left: 0.8em;
+  color: #64748b;
+  margin: 0.6em 0;
+}
+
+.markdown-body table {
+  border-collapse: collapse;
+  margin: 0.6em 0;
+}
+
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid #e2e8f0;
+  padding: 0.4em 0.6em;
+  text-align: left;
+}
+
+.markdown-body th {
+  background: #f8fafc;
+  font-weight: 600;
+}
+
+.markdown-body a {
+  color: #4f46e5;
+  text-decoration: underline;
+}
+
+.markdown-body hr {
+  border: none;
+  border-top: 1px solid #e2e8f0;
+  margin: 0.8em 0;
+}
+
+/* 思考中波浪动画：文字从左右逐字上下弹跳 */
+@keyframes wave-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
