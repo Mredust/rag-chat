@@ -4,7 +4,7 @@ __pycache__/
 *.sqlite3
 .env
 uploads/
-models/
+/models
 data/*
 !data/sample/
 !data/sample/sample_rag.txt
