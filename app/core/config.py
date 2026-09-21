@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "bge-large-zh-v1.5"
     EMBEDDING_DIM: int = 1024
 
+    # ---- 计算设备（本地向量模型加载与微调训练）----
+    # 可选：cpu / cuda / cuda:0 / auto（auto 时按 CUDA 是否可用自动选择）
+    EMBEDDING_DEVICE: str = "cpu"
+
     # ---- 认证（JWT）----
     JWT_SECRET: str = "rag-chat-dev-secret-change-in-production"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
@@ -75,3 +79,20 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
+
+
+def resolve_torch_device(device: str | None = None) -> str:
+    """把配置的 EMBEDDING_DEVICE 解析为 torch 可用的设备字符串。
+
+    - ``auto``：CUDA 可用则用 cuda，否则回退 cpu；
+    - 其余值（cpu / cuda / cuda:0 ...）原样返回。
+    """
+    value = (device or settings.EMBEDDING_DEVICE).strip()
+    if value.lower() == "auto":
+        try:
+            import torch
+
+            return "cuda" if torch.cuda.is_available() else "cpu"
+        except ImportError:
+            return "cpu"
+    return value

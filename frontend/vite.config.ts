@@ -10,7 +10,7 @@ export default defineConfig({
     proxy: {
       // 前端请求 /api 时，代理到后端 FastAPI 服务
       '/api': {
-        target: 'http://localhost:4040',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true,
       },
     },

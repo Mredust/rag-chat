@@ -33,7 +33,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from app.ai import EmbeddingClient, build_embedder, build_llm
 from app.ai.llm import LLMError
-from app.core.config import BASE_DIR
+from app.core.config import BASE_DIR, resolve_torch_device
 from app.core.response import BusinessError, ErrorCode
 from app.db.database import SessionLocal
 from app.models.knowledge import Chunk, Document
@@ -1529,7 +1529,7 @@ def _do_real_train(
     if not train_pairs:
         raise RuntimeError("训练数据集中暂无有效三元组（query/positive 为空）")
 
-    model = SentenceTransformer(base_dir, device="cpu")
+    model = SentenceTransformer(base_dir, device=resolve_torch_device())
     model.max_seq_length = passage_max_len
     loss_fn = MultipleNegativesRankingLoss(model)
     logger.info("真实微调：基础模型加载完成 base_dir=%s", base_dir)

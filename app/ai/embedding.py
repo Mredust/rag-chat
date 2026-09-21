@@ -18,7 +18,7 @@ import threading
 from pathlib import Path
 from typing import Iterable
 
-from app.core.config import BASE_DIR, settings
+from app.core.config import BASE_DIR, resolve_torch_device, settings
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +66,7 @@ def _load_local_model(model_path: Path):
 
         torch.set_num_threads(_CPU_THREADS)
         logger.info("本地向量模型加载中: %s", model_path)
-        model = SentenceTransformer(key, device="cpu")
+        model = SentenceTransformer(key, device=resolve_torch_device())
         _local_model_cache[key] = model
 
     dim = model.get_embedding_dimension()
