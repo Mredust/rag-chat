@@ -1,0 +1,150 @@
+{"query": "Python是什么类型的编程语言？", "positive": "Python 是一种解释型、高级、通用编程语言。", "negative": "Python 是一种编译型低级编程语言。"}
+{"query": "运行Python程序通常可以使用哪些命令？", "positive": "常见命令是 python 或 py。", "negative": "运行Python程序只能使用 py 命令，不能使用 python。"}
+{"query": "在Windows环境中，如果python命令不可用，可以尝试什么命令？", "positive": "可以尝试使用 py 命令。", "negative": "可以尝试使用 python3 命令。"}
+{"query": "Python中变量声明有什么特点？", "positive": "变量不需要提前声明类型，解释器会根据赋值自动推断类型。", "negative": "变量必须先声明类型，然后才能被赋值。"}
+{"query": "下列哪个是浮点数：10、3.14、True？", "positive": "3.14 是浮点数。", "negative": "10 是浮点数。"}
+{"query": "Python中不可变有序集合是哪种数据类型？", "positive": "tuple（元组）是不可变有序集合。", "negative": "list（列表）是不可变有序集合。"}
+{"query": "字典的数据结构是什么样子的？", "positive": "字典是键值对结构，例如键为 name、值为 Alice 的映射。", "negative": "字典是只能保存单一元素且无序的集合。"}
+{"query": "集合（set）有哪些特点？", "positive": "集合是无序且元素不重复的集合。", "negative": "集合是有序且元素可以重复的集合。"}
+{"query": "Python条件判断使用哪些关键字？", "positive": "使用 if、elif、else 进行条件判断。", "negative": "使用 switch、case、default 进行条件判断。"}
+{"query": "在Python中缩进有什么作用？", "positive": "缩进是Python语法的一部分，不能随意省略。", "negative": "缩进只是为了代码美观，不影响语法执行。"}
+{"query": "根据成绩判断示例，若score=95，程序会输出什么？", "positive": "因为95>=90，所以输出优秀。", "negative": "因为95>=60且<90，所以输出及格。"}
+{"query": "for循环常用于哪些场景？", "positive": "for循环常用于遍历列表、字符串、字典等可迭代对象。", "negative": "for循环用于在条件为True时无限重复执行。"}
+{"query": "while循环会在什么条件下重复执行？", "positive": "while循环会在条件为True时重复执行，适合处理不确定循环次数的场景。", "negative": "while循环会在条件为False时重复执行。"}
+{"query": "Python中用什么关键字定义函数？", "positive": "Python使用def关键字定义函数。", "negative": "Python使用function关键字定义函数。"}
+{"query": "函数在程序中的作用是什么？", "positive": "函数用于封装可复用逻辑，使用函数可以提高代码复用性，减少重复代码。", "negative": "函数会让代码逻辑分散，降低复用性并增加大量重复代码。"}
+{"query": "try和except的作用是什么？", "positive": "使用try、except捕获异常，避免程序因为运行时错误直接退出。", "negative": "使用try、except定义循环和条件分支，使程序跳过所有错误。"}
+{"query": "当执行 int('abc') 时，会抛出哪类异常？", "positive": "会抛出ValueError。", "negative": "会抛出FileNotFoundError。"}
+{"query": "open函数读写文件时，推荐用什么语句自动关闭文件？", "positive": "推荐使用with语句自动关闭文件。", "negative": "推荐直接调用open函数而无需关心关闭文件。"}
+{"query": "知识库读取文件示例中，传给open函数的参数有哪些？", "positive": "文件名是 demo.txt，模式是 r，并指定了编码 utf-8。", "negative": "文件名是 demo.txt，模式是 w，未指定编码。"}
+{"query": "知识库写入文件示例的功能是什么？", "positive": "以写入模式打开 demo.txt，并向文件写入字符串 hello。", "negative": "以只读模式打开 demo.txt，读出字符串 hello。"}
+{"query": "在Python中，模块和包分别指什么？", "positive": "模块是一个Python文件，包是包含多个模块的目录。", "negative": "模块是一个目录，包是一个Python文件。"}
+{"query": "在Python中可以使用什么语句导入模块？", "positive": "可以使用import语句导入模块，例如 import os。", "negative": "可以使用include语句导入模块，例如 include os。"}
+{"query": "Python标准库提供了哪些常用模块？", "positive": "Python标准库提供了os、sys、json、datetime、pathlib、subprocess、csv等常用模块。", "negative": "Python标准库提供了printf、scanf、string.h等模块。"}
+{"query": "为什么要使用虚拟环境？", "positive": "使用虚拟环境可以隔离依赖，避免不同项目之间依赖冲突。", "negative": "使用虚拟环境会合并所有项目的依赖，加剧依赖冲突。"}
+{"query": "本项目常见的虚拟环境目录名有哪些？", "positive": "常见虚拟环境目录名包括 .venv 和 venv。", "negative": "常见虚拟环境目录名包括 node_modules 和 site-packages。"}
+{"query": "本项目使用什么工具管理依赖，如何运行项目？", "positive": "本项目使用uv管理依赖，可以通过 py -m uv sync 或 py -m uv run 命令运行项目。", "negative": "本项目使用npm管理依赖，可通过 npm install 和 npm start 运行项目。"}
+{"query": "变量命名的最佳实践是什么？", "positive": "使用有意义的变量名。", "negative": "使用随机的单字母变量名可以隐藏代码意图。"}
+{"query": "函数设计的一条最佳实践是什么？", "positive": "保持函数职责单一。", "negative": "一个函数应尽量包含所有功能，避免拆分。"}
+{"query": "对于可预见的错误，最佳实践是什么？", "positive": "使用异常处理处理可预见错误。", "negative": "忽略所有异常，确保程序流程不被打断。"}
+{"query": "根据成绩判断示例，若score=85，程序会输出什么？", "positive": "因为85>=60且<90，所以输出及格。", "negative": "因为85>=90，所以输出优秀。"}
+{"query": "为什么需要为 Python 项目使用虚拟环境管理依赖？", "positive": "虚拟环境可以隔离不同项目的依赖包，避免版本冲突，确保各项目环境相互独立。", "negative": "虚拟环境会将所有项目的依赖包混合安装到全局环境中，以便复用。"}
+{"query": "在代码中，关键逻辑缺少注释时应该怎么做？", "positive": "应该为关键逻辑添加必要注释，解释代码意图和复杂实现，便于后期维护。", "negative": "不需要添加注释，因为注释会降低代码执行速度。"}
+{"query": "使用格式化工具统一代码风格有什么好处？", "positive": "可以自动让代码风格保持一致，减少阅读和协作时的格式分歧。", "negative": "可以让代码逻辑变得模糊，从而保护商业机密。"}
+{"query": "API Key、数据库密码等敏感信息应如何管理？", "positive": "不应写死在代码中，建议放入环境变量或专门的安全配置系统。", "negative": "可以将敏感信息直接写在代码的注释里，方便其他开发人员看到。"}
+{"query": "数据库相比普通文件在保存应用数据方面有哪些优势？", "positive": "数据库提供结构化查询、事务、索引、并发控制和权限管理等能力。", "negative": "数据库只能像普通文件一样顺序读写，无法随机查询。"}
+{"query": "Web 应用中使用数据库通常保存哪些数据？", "positive": "通常保存用户信息、业务数据、配置数据和日志数据等。", "negative": "通常保存体验用户的鼠标移动轨迹和页面截图。"}
+{"query": "RAG 知识库系统在数据库中会保存哪些数据？", "positive": "会保存文件信息、文本片段和向量数据。", "negative": "只保存最终生成的回答文字，不保存其他内容。"}
+{"query": "关系型数据库使用什么结构来组织数据？", "positive": "关系型数据库使用表组织数据，每张表由行和列组成。", "negative": "关系型数据库使用目录树来组织数据，每个目录是一个数据库。"}
+{"query": "Oracle 是关系型数据库吗？", "positive": "是，Oracle 是知识库列出的常见关系型数据库之一。", "negative": "不是，Oracle 是非关系型数据库。"}
+{"query": "SQLite 在知识库中被归为哪一类数据库？", "positive": "SQLite 被归为常见关系型数据库。", "negative": "SQLite 被归为对象数据库，不支持表结构。"}
+{"query": "PostgreSQL 支持哪些功能特性？", "positive": "PostgreSQL 支持 JSON、全文检索、扩展机制和事务。", "negative": "PostgreSQL 不支持 JSON，也不支持事务。"}
+{"query": "SQL 在关系型数据库中扮演什么角色？", "positive": "SQL 是操作关系型数据库的标准语言。", "negative": "SQL 是数据库服务器专用的操作系统内核。"}
+{"query": "创建用户名表应使用哪条 SQL 语句？", "positive": "CREATE TABLE。", "negative": "CREATE USER。"}
+{"query": "向 user 表插入一条记录，需要使用哪个 SQL 关键字？", "positive": "INSERT。", "negative": "DELETE。"}
+{"query": "要查询 user 表中的数据，应使用哪个 SQL 关键字？", "positive": "SELECT。", "negative": "UPDATE。"}
+{"query": "修改已经存在的用户记录，应该使用哪条 SQL 操作？", "positive": "UPDATE。", "negative": "SELECT。"}
+{"query": "删除表中不再需要的数据行，应该使用哪条 SQL 操作？", "positive": "DELETE。", "negative": "CREATE INDEX。"}
+{"query": "创建索引以加快数据查找时应使用哪条 SQL 语句？", "positive": "CREATE INDEX。", "negative": "DELETE FROM。"}
+{"query": "根据知识库示例，查询 user 表全部记录的 SQL 语句是什么？", "positive": "SELECT * FROM \"user\";", "negative": "INSERT INTO \"user\" (id, name) VALUES ('user_001', '张三');"}
+{"query": "根据知识库示例，向 user 表插入一条 id 为 user_001、name 为张三的记录的 SQL 语句是什么？", "positive": "INSERT INTO \"user\" (id, name) VALUES ('user_001', '张三');", "negative": "SELECT * FROM \"user\";"}
+{"query": "主键在数据库表中起什么作用？", "positive": "主键用于唯一标识一行数据。", "negative": "主键用于记录数据的创建时间。"}
+{"query": "一个表通常设置多少个主键？", "positive": "一个表通常有一个主键。", "negative": "一个表通常设置两个主键，这样可以同时从两个维度标识一行。"}
+{"query": "唯一约束用于解决什么问题？", "positive": "唯一约束用于保证某个字段的值不能重复。", "negative": "唯一约束用于允许某个字段的值为空且可重复。"}
+{"query": "在 data_dictionary 表中，为什么 key 字段通常设置唯一约束？", "positive": "因为每个配置项只能有一个当前值，key 不重复可以防止配置项冲突。", "negative": "因为同一个配置项需要在表中保存多个历史版本的值。"}
+{"query": "PostgreSQL 中插入重复 key 导致唯一约束失败时，错误信息是什么？", "positive": "duplicate key value violates unique constraint。", "negative": "out of memory for query result。"}
+{"query": "PostgreSQL 中 SERIAL 字段会自动完成什么功能？", "positive": "SERIAL 字段会自动创建序列，用来生成递增的 id。", "negative": "SERIAL 字段会自动创建随机索引，加速查询。"}
+{"query": "若希望 id 字段按 1、2、3 自动递增，使用哪种字段类型最合适？", "positive": "SERIAL。", "negative": "VARCHAR。"}
+{"query": "数据库的并发控制能力指的是什么？", "positive": "它允许多个用户或连接同时访问数据库并保证数据一致性。", "negative": "它限制数据库同一时刻只能有一个连接，否则会崩溃。"}
+{"query": "数据库的权限管理能力主要用来做什么？", "positive": "用来控制不同用户对数据库对象（如表、数据）的访问权限，保护数据安全。", "negative": "用来定期清理数据库中无用的表，节省空间。"}
+{"query": "PostgreSQL 中的事务能力有什么用处？", "positive": "事务可以保证一组数据库操作要么全部成功，要么全部失败，维护数据一致性。", "negative": "事务只用于把 SQL 语句加密，防止网络抓包。"}
+{"query": "手动插入自增id后没有同步更新序列，会导致什么后果？", "positive": "后续自动插入时可能生成已经存在的id，导致主键冲突。", "negative": "会导致外键约束失效，无法关联其他表。"}
+{"query": "修复PostgreSQL自增序列错位的常用SQL是什么？", "positive": "SELECT setval(pg_get_serial_sequence('public.data_dictionary', 'id'), COALESCE((SELECT MAX(id) FROM public.data_dictionary), 1), true);", "negative": "DELETE FROM public.data_dictionary WHERE id > (SELECT MAX(id) FROM public.data_dictionary);"}
+{"query": "pg_get_serial_sequence('public.data_dictionary'", "positive": "'id') 的作用是什么？", "negative": "返回 public.data_dictionary 表 id 字段对应的自增序列名称。"}
+{"query": "在知识库系统中，file 表中的 collection_id 字段表示什么？", "positive": "表示该文件所属的知识空间，它关联 collection 表中的 uuid。", "negative": "表示该文件上传者的用户ID，指向 user 表。"}
+{"query": "数据库表之间常见的关系包括哪些？", "positive": "一对一、一对多、多对多。", "negative": "包含关系、继承关系和聚合关系。"}
+{"query": "在知识库系统中，知识空间和文件通常是什么关系？", "positive": "一对多关系，一个知识空间可以有多个文件。", "negative": "多对多关系，一个文件可以属于多个知识空间。"}
+{"query": "如果经常根据 collection_id 查询文件，应该怎样优化？", "positive": "为 file.collection_id 创建索引。", "negative": "为 file.id 创建全文索引。"}
+{"query": "如果经常进行全文检索，应该对什么字段创建什么索引？", "positive": "对 tsvector 字段创建 GIN 索引。", "negative": "对 text 字段创建 B-tree 索引。"}
+{"query": "PostgreSQL 中常见的索引类型有哪些？", "positive": "B-tree 索引、GIN 索引、向量索引等。", "negative": "只有 B-tree 索引和哈希索引。"}
+{"query": "PostgreSQL pgvector 扩展的主要作用是什么？", "positive": "用于存储和检索 embedding 向量。", "negative": "用于替代 GIN 索引进行全文搜索。"}
+{"query": "哪条 SQL 命令可以启用 pgvector 的 vector 扩展？", "positive": "CREATE EXTENSION IF NOT EXISTS vector;", "negative": "CREATE EXTENSION IF NOT EXISTS pgvector;"}
+{"query": "vector(1024) 字段的含义是什么？", "positive": "每条向量有 1024 个维度，维度必须和 embedding 模型输出维度一致。", "negative": "该字段可以存储最大长度为 1024 字节的二进制数据。"}
+{"query": "使用 pgvector 创建一张包含 UUID 主键和向量字段的表，SQL 怎么写？", "positive": "CREATE EXTENSION IF NOT EXISTS vector; CREATE TABLE embedding ( uuid UUID PRIMARY KEY, embedding_vector vector(1024) );", "negative": "CREATE TABLE embedding ( id SERIAL PRIMARY KEY"}
+{"query": "embedding 表在 RAG 系统中用于存放什么数据？", "positive": "文本片段对应的向量数据。", "negative": "文件切分后的原始文本片段。"}
+{"query": "典型 RAG 系统可能包含哪些数据库表？", "positive": "user、collection、file、chunk、embedding、data_dictionary。", "negative": "user、role、menu、dept、post。"}
+{"query": "data_dictionary 表在 RAGChat 项目中的用途是什么？", "positive": "后端启动时会读取其中的 embeddings_path，用于初始化 embedding 模型。", "negative": "后端启动时会读取其中的 database_url，用于建立数据库连接。"}
+{"query": "RAGChat 后端启动时初始化 embedding 模型需要读取 data_dictionary 表中的哪个字段？", "positive": "embeddings_path。", "negative": "embedding_dimensions。"}
+{"query": "数据库连接失败时，需要检查哪些方面？", "positive": "检查主机、端口、用户名、密码、数据库名。", "negative": "检查 collections 表是否存在，并重建索引。"}
+{"query": "提示“表不存在”时，应优先检查什么？", "positive": "是否执行了建表 SQL。", "negative": "是否安装了 pgvector 扩展。"}
+{"query": "在 PostgreSQL 中如果遇到“扩展不存在”的错误，比如 vector 扩展不存在，应该怎么做？", "positive": "检查 pgvector 是否安装，未安装则需要先安装该扩展。", "negative": "将相关字段类型由 vector 改为 json，扩展就不需要了。"}
+{"query": "出现主键冲突可能的原因有哪些？", "positive": "重复插入了相同 id，或者自增序列错位。", "negative": "外键关联的表没有先插入数据。"}
+{"query": "使用 setval 可以解决什么数据库问题？", "positive": "自增序列错位问题。", "negative": "主键重复索引碎片问题。"}
+{"query": "向 PostgreSQL 导入 SQL 文件后出现中文乱码，最可能的原因是什么？", "positive": "数据库编码或 SQL 文件编码不是 UTF-8。", "negative": "是因为没有使用 \\encoding 命令设置客户端编码，与数据库编码和文件编码无关。"}
+{"query": "项目部署时，初始化 SQL 建议包含哪些内容？", "positive": "建库、建表、扩展创建、索引创建和基础数据插入。", "negative": "只需要包含基础数据插入，建表交给 ORM 自动处理。"}
+{"query": "如果项目没有自动建表逻辑，启动前需要做什么？", "positive": "手动完成数据库初始化。", "negative": "先启动后端，让后端程序生成表后再初始化。"}
+{"query": "准备初始化 SQL 有什么好处？", "positive": "保证项目部署时数据库结构完整，后端能正常读取用户、知识空间、配置项和知识库数据。", "negative": "保证每次启动后端时自动清空并重建所有业务数据。"}
+{"query": "外键在数据库表关系中的作用是什么？", "positive": "用于表示表之间的关联关系。", "negative": "用于保证表中字段值不超出指定范围。"}
+{"query": "RAG 系统中 collection 表通常用来存储什么数据？", "positive": "知识空间信息。", "negative": "系统中的角色权限信息。"}
+{"query": "RAG 系统中 chunk 表的作用是什么？", "positive": "存储文件切分后的文本片段。", "negative": "存储上传文件的原始二进制内容。"}
+{"query": "pgvector 中向量维度与 embedding 模型输出维度有什么关系？", "positive": "必须保持一致。", "negative": "可以不相同，查询时会自动截断或补齐。"}
+{"query": "Web 后端主要负责什么？", "positive": "处理客户端请求、执行业务逻辑、访问数据库、调用第三方服务，并把处理结果返回给前端。", "negative": "负责页面展示和用户交互，不处理数据和业务能力。"}
+{"query": "在前后端分离项目中，前端通常负责什么？", "positive": "负责页面展示和用户交互，并通过 HTTP 请求调用后端接口。", "negative": "负责直接访问数据库并执行业务逻辑。"}
+{"query": "常见后端接口形式有哪些？", "positive": "REST API、GraphQL API、RPC 接口等。", "negative": "只有 REST API 一种形式。"}
+{"query": "GET 方法的主要语义是什么？", "positive": "获取资源。", "negative": "创建资源或提交数据。"}
+{"query": "POST 方法的主要语义是什么？", "positive": "创建资源或提交数据。", "negative": "删除资源。"}
+{"query": "PUT 方法的主要语义是什么？", "positive": "整体更新资源。", "negative": "局部更新资源。"}
+{"query": "PATCH 方法的主要语义是什么？", "positive": "局部更新资源。", "negative": "整体更新资源。"}
+{"query": "DELETE 方法的主要语义是什么？", "positive": "删除资源。", "negative": "获取资源。"}
+{"query": "状态码 200 表示什么？", "positive": "请求成功。", "negative": "资源创建成功。"}
+{"query": "状态码 201 表示什么？", "positive": "资源创建成功。", "negative": "请求参数错误。"}
+{"query": "状态码 400 表示什么？", "positive": "请求参数错误。", "negative": "资源不存在。"}
+{"query": "状态码 401 表示什么？", "positive": "未认证。", "negative": "无权限。"}
+{"query": "状态码 403 表示什么？", "positive": "无权限。", "negative": "未认证。"}
+{"query": "状态码 404 表示什么？", "positive": "资源不存在。", "negative": "服务器内部错误。"}
+{"query": "状态码 500 表示什么？", "positive": "服务器内部错误。", "negative": "请求成功。"}
+{"query": "REST API 设计通常围绕什么来设计接口？", "positive": "围绕资源设计接口，例如可以围绕 collections、files 等资源设计。", "negative": "围绕数据库表结构直接暴露表和字段。"}
+{"query": "获取知识空间列表的接口示例是什么？", "positive": "GET /api/v1/collections/", "negative": "DELETE /api/v1/collections/{uuid}"}
+{"query": "创建知识空间的接口示例是什么？", "positive": "POST /api/v1/collections/", "negative": "GET /api/v1/collections/"}
+{"query": "修改知识空间的接口示例是什么？", "positive": "PUT /api/v1/collections/{uuid}", "negative": "DELETE /api/v1/collections/{uuid}"}
+{"query": "删除知识空间的接口示例是什么？", "positive": "DELETE /api/v1/collections/{uuid}", "negative": "POST /api/v1/collections/"}
+{"query": "良好的 API 设计应该具备哪些特点？", "positive": "路径清晰、方法语义明确、返回结构统一。", "negative": "路径越短越好、所有操作都用 GET、返回结构每次不同。"}
+{"query": "FastAPI 是基于哪些库构建的？", "positive": "FastAPI 基于 Starlette 和 Pydantic。", "negative": "FastAPI 基于 Django 和 Flask。"}
+{"query": "FastAPI 常见特点有哪些？", "positive": "支持 async 和 await；自动生成 Swagger 文档；使用 Pydantic 进行请求参数校验；支持依赖注入；性能较好，适合构建接口服务。", "negative": "不支持异步；无法自动生成文档；不进行参数校验；不支持依赖注入。"}
+{"query": "FastAPI 使用什么进行请求参数校验？", "positive": "使用 Pydantic 进行请求参数校验。", "negative": "使用 XML Schema 进行请求参数校验。"}
+{"query": "Uvicorn 是什么？", "positive": "Uvicorn 是一个 ASGI 服务器，常用于运行 FastAPI 应用。", "negative": "Uvicorn 是 Python 的 Web 框架，用来替代 FastAPI。"}
+{"query": "请给出一个 Uvicorn 启动 FastAPI 应用的命令示例。", "positive": "uvicorn src.main:app --host 127.0.0.1 --port 8000 --reload", "negative": "uvicorn src.main --host 127.0.0.1 --port 8000 --reload"}
+{"query": "在 RAGChat 项目中，server.py 是如何启动后端服务的？", "positive": "server.py 内部调用 uvicorn.run 并传入 src.main:app 启动后端服务。", "negative": "server.py 直接执行 app.run() 启动 Flask 开发服务器。"}
+{"query": "接口的统一返回结构中 code、message、data 分别表示什么？", "positive": "code 表示业务状态，message 描述结果，data 返回业务数据。", "negative": "code 是 HTTP 状态码，message 是错误日志，data 是加密 Token。"}
+{"query": "什么情况下会触发跨域 CORS？后端如何解决？", "positive": "当前端和后端地址不同时，浏览器可能触发跨域限制；后端可以通过 CORS 中间件（FastAPI 中使用 CORSMiddleware）允许前端访问。", "negative": "只有当后端使用 HTTPS 时才会触发跨域，且无法通过 CORS 中间件解决。"}
+{"query": "文件上传通常使用什么格式？FastAPI 如何接收上传文件？", "positive": "文件上传通常使用 multipart/form-data；FastAPI 可以通过 UploadFile 和 File 接收上传文件。", "negative": "文件上传通常使用 application/json；FastAPI 通过 Response 接收二进制文件。"}
+{"query": "后端项目通常需要配置哪些参数？", "positive": "后端项目通常需要配置数据库地址、API Key、模型路径、服务端口等参数。", "negative": "后端项目通常只需要配置前端页面主题颜色和浏览器缓存大小。"}
+{"query": "常见的后端配置方式有哪些？", "positive": "常见的后端配置方式包括YAML配置文件、.env环境变量文件、数据库配置表和命令行参数。", "negative": "常见的后端配置方式包括HTML文件、CSS样式表和JavaScript脚本。"}
+{"query": "RAGChat项目中数据库连接配置保存在哪个文件中？", "positive": "RAGChat项目中数据库连接配置保存在conf.yaml中。", "negative": "RAGChat项目中数据库连接配置保存在.env文件中。"}
+{"query": "RAGChat项目中模型和提示词配置保存在哪里？", "positive": "RAGChat项目中模型和提示词配置保存在data_dictionary表中。", "negative": "RAGChat项目中模型和提示词配置保存在conf.yaml中。"}
+{"query": "前端请求失败时，首先应该排查什么？", "positive": "先检查后端是否启动。", "negative": "先检查浏览器是否安装最新插件。"}
+{"query": "如果端口不一致，应该检查哪里的配置？", "positive": "检查前端接口地址配置。", "negative": "检查操作系统防火墙的入站规则。"}
+{"query": "接口返回500错误时，应该查看什么？", "positive": "查看后端控制台日志。", "negative": "查看前端控制台的本地存储记录。"}
+{"query": "遇到数据库报错时，需要检查哪些方面？", "positive": "检查连接配置、表结构和数据。", "negative": "检查前端页面中的表单校验规则。"}
+{"query": "文件上传失败时，应检查哪些内容？", "positive": "检查文件类型、文件大小和保存路径权限。", "negative": "检查后端项目的依赖包版本是否最新。"}
+{"query": "模型初始化失败时，应该检查什么？", "positive": "检查模型路径和模型文件是否完整。", "negative": "检查前端接口地址的端口号是否一致。"}
+{"query": "数据库地址、API Key、模型路径、服务端口等属于哪类配置？", "positive": "属于后端项目通常需要配置的参数。", "negative": "属于前端页面路由参数。"}
+{"query": "以下哪种方式属于常见的后端配置方式？", "positive": "YAML配置文件、.env环境变量文件、数据库配置表、命令行参数都属于。", "negative": "Excel表格、Word文档和PPT演示文稿都属于后端配置方式。"}
+{"query": "conf.yaml在RAGChat项目中的作用是什么？", "positive": "它用于保存数据库连接配置。", "negative": "它用于保存前端页面的CSS样式。"}
+{"query": "data_dictionary表在RAGChat项目中的作用是什么？", "positive": "它用于保存模型和提示词配置。", "negative": "它用于保存用户日志信息。"}
+{"query": ".env环境变量文件属于哪类配置方式？", "positive": "它属于后端常见的配置方式之一。", "negative": "它属于前端UI布局方式。"}
+{"query": "命令行参数能否作为后端配置的一种方式？", "positive": "能，命令行参数是后端常见配置方式之一。", "negative": "不能，后端配置只能通过修改数据库表实现。"}
+{"query": "数据库配置表是否属于后端配置方式？", "positive": "属于，数据库配置表是后端常见配置方式之一。", "negative": "不属于，数据库配置表是前端组件的一部分。"}
+{"query": "RAGChat的数据库连接配置放在YAML还是环境变量文件中？", "positive": "放在YAML文件（conf.yaml）中。", "negative": "放在环境变量文件（.env）中。"}
+{"query": "如果数据库报错，应优先检查连接配置、表结构和数据，对吗？", "positive": "对，这是数据库报错时的排查思路。", "negative": "不对，应优先重装操作系统。"}
+{"query": "若后端未启动，前端请求会失败吗？", "positive": "会，前端请求失败时需要先检查后端是否启动。", "negative": "不会，前端请求与后端服务无关。"}
+{"query": "前端接口地址配置错误会导致什么现象？", "positive": "可能导致端口不一致，进而引起请求失败。", "negative": "会导致数据库表结构自动改变。"}
+{"query": "后端控制台日志在排错中起什么作用？", "positive": "当接口返回500时，通过查看后端控制台日志定位错误。", "negative": "用于显示前端界面的动画效果。"}
+{"query": "模型路径或模型文件不完整会有什么后果？", "positive": "可能导致模型初始化失败。", "negative": "会导致文件上传成功但无法下载。"}
+{"query": "保存路径权限不足时，上传文件可能会怎样？", "positive": "文件上传失败。", "negative": "数据库连接自动断开。"}
+{"query": "在常见排错思路中，检查表结构和数据属于哪类错误的排查？", "positive": "属于数据库报错的排查。", "negative": "属于前端请求失败的排查。"}
+{"query": "知识库中列出了几条常见排错思路？", "positive": "共列出了6条。", "negative": "共列出了5条。"}
+{"query": "检查后端是否启动属于哪类问题的排查步骤？", "positive": "属于前端请求失败时的排查步骤。", "negative": "属于模型初始化失败的排查步骤。"}
+{"query": "conf.yaml和data_dictionary表在RAGChat中分别负责什么？", "positive": "conf.yaml负责数据库连接配置，data_dictionary表负责模型和提示词配置。", "negative": "conf.yaml负责模型配置，data_dictionary表负责数据库连接配置。"}
+{"query": "RAGChat的数据库连接配置是否保存在data_dictionary表中？", "positive": "不是，RAGChat的数据库连接配置保存在conf.yaml中。", "negative": "是，它保存在data_dictionary表中。"}
+{"query": "模型和提示词配置是否保存在conf.yaml中？", "positive": "不是，模型和提示词配置保存在data_dictionary表中。", "negative": "是，模型和提示词配置保存在conf.yaml中。"}

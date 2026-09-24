@@ -21,3 +21,4 @@ logs/
 /docs
 rerankers
 temp/
+/test/output

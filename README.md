@@ -89,7 +89,7 @@ npm run dev
 
 ## 常用操作
 
-- **配置重排序**：进入「系统设置 → 重排序」，开启 `rerank_enabled` 并填入 `rerank_model`（如 `rerankers/bge-reranker-base`，建议绝对路径），重启后端后日志打印「加载交叉编码器」即生效。
+- **配置重排序**：进入「系统设置 → 重排序」，开启 `rerank_enabled` 并填入 `rerank_model`（项目根目录相对路径，正斜杠且不含盘符，如 `rerankers/bge-reranker-base`），重启后端后日志打印「加载交叉编码器」即生效。
 - **导入向量模型**：「我的模型 → 导入模型文件夹」，将模型目录保存到 `models/` 并登记 `model_dir`。
 
 ## 注意事项

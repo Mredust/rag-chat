@@ -26,6 +26,7 @@ from app.services.parsing import (
     split_hierarchical,
     split_text,
 )
+from app.utils.paths import to_abs_path, to_rel_path
 
 logger = logging.getLogger(__name__)
 
@@ -37,12 +38,12 @@ _INGEST_STRATEGIES: dict[str, dict] = {}
 
 
 def save_upload(space_id: str, doc_id: str, filename: str, content: bytes) -> str:
-    """将上传文件落盘，返回存储路径。"""
+    """将上传文件落盘，返回项目根目录下的相对存储路径。"""
     directory = UPLOAD_DIR / space_id
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"{doc_id}_{filename}"
     path.write_bytes(content)
-    return str(path)
+    return to_rel_path(path)
 
 
 def schedule_ingest(doc_id: str, strategy_config: dict | None = None) -> None:
@@ -150,7 +151,7 @@ async def _process(db: AsyncSession, doc: Document) -> None:
     # 1) 解析
     doc.status = DocumentStatus.PARSING.value
     await db.commit()
-    text = await asyncio.to_thread(parse_text, doc.file_type, doc.storage_path)
+    text = await asyncio.to_thread(parse_text, doc.file_type, str(to_abs_path(doc.storage_path)))
     logger.debug("文档解析完成: doc_id=%s, type=%s, 字符数=%d", doc.id, doc.file_type, len(text))
 
     # 2) 切片（优先使用导入向导策略，否则回退切片策略/运行时默认）

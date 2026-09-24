@@ -76,6 +76,20 @@ export interface MLEvalDimensionPayload {
   eval_config?: Record<string, unknown>
 }
 
+export interface EvalPromptTemplate {
+  label: string
+  prompt: string
+  labels?: { pass: string; fail: string }
+  threshold?: number
+  name?: string
+  description?: string
+}
+
+export interface EvalPromptTemplates {
+  classify: Record<string, EvalPromptTemplate>
+  numeric: Record<string, EvalPromptTemplate>
+}
+
 export interface MLLeaderboardPayload {
   name: string
   dimension_ids?: string[]
@@ -339,8 +353,11 @@ export const mlApi = {
 
   // 评测维度
   listDimensions: () => http.get<MLEvalDimensionList>('/ml/dimensions'),
+  getDimension: (id: string) => http.get<MLEvalDimension>(`/ml/dimensions/${id}`),
   createDimension: (data: MLEvalDimensionPayload) => http.post<MLEvalDimension>('/ml/dimensions', data),
+  updateDimension: (id: string, data: MLEvalDimensionPayload) => http.put<MLEvalDimension>(`/ml/dimensions/${id}`, data),
   deleteDimension: (id: string) => http.delete<null>(`/ml/dimensions/${id}`),
+  getEvalPromptTemplates: () => http.get<EvalPromptTemplates>('/ml/eval-prompt-templates'),
 
   // 评测任务
   listEvalTasks: () => http.get<MLEvalTaskList>('/ml/eval-tasks'),

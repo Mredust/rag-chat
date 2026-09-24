@@ -37,7 +37,6 @@ export function trainMethodFull(train_method: string, config?: Record<string, un
 export const EVAL_TYPE_LABELS: Record<string, string> = {
   llm_classify: '大模型评估-分类型',
   llm_numeric: '大模型评估-数值型',
-  rule_sim: '规则评估-文本相似度',
   retrieval: '检索评估',
   spearman: '统计评估-Spearman相关系数',
 }

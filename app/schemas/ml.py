@@ -166,6 +166,13 @@ class MLEvalDimensionCreate(BaseModel):
     eval_config: dict = Field(default_factory=dict)
 
 
+class MLEvalDimensionUpdate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=128)
+    description: str = Field("", max_length=500)
+    eval_type: str = Field("llm_classify", max_length=32)
+    eval_config: dict = Field(default_factory=dict)
+
+
 class MLEvalDimensionResponse(BaseModel):
     id: str
     name: str

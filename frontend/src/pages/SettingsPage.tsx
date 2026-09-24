@@ -316,7 +316,7 @@ function ConfigField({
             isSecret
               ? (config.value ? '******（留空不修改）' : '未设置')
               : config.key === 'rerank_model'
-                ? '例如：rerankers/bge-reranker-base（建议绝对路径）'
+                ? '例如：rerankers/bge-reranker-base（相对项目根目录）'
                 : config.key === 'rerank_top_m'
                   ? '例如：20'
                   : config.key === 'rrf_k'

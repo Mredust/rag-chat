@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.system import SystemConfig
+from app.utils.paths import to_rel_path
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,9 @@ DEFAULT_PROMPT_RAG = (
 
 # 敏感配置项（如 API Key），加密存储、接口不返回明文
 SECRET_KEYS = {"llm_api_key", "embedding_api_key"}
+
+# 路径类配置项：入库时统一转为项目根目录下的相对路径
+PATH_KEYS = {"rerank_model"}
 
 # 运行时配置缓存（进程内）
 _runtime_cache: dict[str, str] | None = None
@@ -124,7 +128,9 @@ async def list_config(db: AsyncSession) -> list[dict]:
 
 
 async def set_config(db: AsyncSession, key: str, value: str, is_secret: bool) -> SystemConfig:
-    """新增/更新配置项；敏感项加密存储，写后清除缓存。"""
+    """新增/更新配置项；敏感项加密存储，路径项存相对路径，写后清除缓存。"""
+    if key in PATH_KEYS and value and not is_secret:
+        value = to_rel_path(value)
     result = await db.execute(select(SystemConfig).where(SystemConfig.key == key))
     row = result.scalar_one_or_none()
     stored = encrypt(value) if is_secret else value

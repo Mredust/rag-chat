@@ -26,6 +26,7 @@ from app.schemas.ml import (
     MLEvalDimensionCreate,
     MLEvalDimensionListResponse,
     MLEvalDimensionResponse,
+    MLEvalDimensionUpdate,
     MLEvalTaskCreate,
     MLEvalTaskListResponse,
     MLEvalTaskResponse,
@@ -569,6 +570,16 @@ async def list_dimensions(
     )
 
 
+@router.get("/dimensions/{dimension_id}", summary="评测维度详情")
+async def get_dimension(
+    dimension_id: str,
+    _: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    dim = await _get_dimension_or_404(db, dimension_id)
+    return success_response(data=MLEvalDimensionResponse.model_validate(dim).model_dump(mode="json"))
+
+
 @router.post("/dimensions", summary="创建评测维度")
 async def create_dimension(
     data: MLEvalDimensionCreate,
@@ -577,6 +588,23 @@ async def create_dimension(
 ):
     dim = await ml_service.create_dimension(db, data)
     return success_response(data=MLEvalDimensionResponse.model_validate(dim).model_dump(mode="json"))
+
+
+@router.put("/dimensions/{dimension_id}", summary="更新评测维度")
+async def update_dimension(
+    dimension_id: str,
+    data: MLEvalDimensionUpdate,
+    _: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    dim = await _get_dimension_or_404(db, dimension_id)
+    dim = await ml_service.update_dimension(db, dim, data)
+    return success_response(data=MLEvalDimensionResponse.model_validate(dim).model_dump(mode="json"))
+
+
+@router.get("/eval-prompt-templates", summary="大模型评估评分器模板")
+async def get_eval_prompt_templates(_: str = Depends(get_current_user_id)):
+    return success_response(data=ml_service.get_eval_prompt_templates())
 
 
 @router.delete("/dimensions/{dimension_id}", summary="删除评测维度")

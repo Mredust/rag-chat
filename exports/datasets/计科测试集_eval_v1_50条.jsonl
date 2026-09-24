@@ -1,0 +1,50 @@
+{"query": "请根据文档介绍 Python 的主要特点、应用场景和程序运行方式。", "positive": "Python 是解释型、高级、通用编程语言，特点是可读性强、标准库丰富、生态成熟、跨平台运行。常见应用场景包括快速开发、数据分析、人工智能、自动化脚本、Web 后端开发。程序通过解释器执行，常见命令是 python 或 py；在 Windows 中若 python 不可用，可尝试使用 py。", "negative": "Python 是编译型语言，只能用于 Web 后端开发，必须通过 java 命令运行。"}
+{"query": "Python 中变量需要声明类型吗？请列举常见数据类型。", "positive": "变量不需要提前声明类型，解释器会根据赋值自动推断类型。常见数据类型包括：int、float、str、bool、list、tuple、dict、set。", "negative": "变量必须先声明类型后才能赋值；常见数据类型只有 int、float 和 string。"}
+{"query": "Python 条件判断使用哪些关键字？为什么缩进不能省略？", "positive": "条件判断使用 if、elif、else；缩进是 Python 语法的一部分，不能随意省略。", "negative": "条件判断使用 if、else if、else；缩进仅用于代码美观，省略后程序也能正确运行。"}
+{"query": "请说明 for 循环和 while 循环各自适合的场景。", "positive": "for 循环常用于遍历列表、字符串、字典等可迭代对象；while 循环会在条件为 True 时重复执行，适合处理不确定循环次数的场景。", "negative": "for 循环适合处理不确定循环次数的场景，while 循环只能用于遍历固定长度的列表。"}
+{"query": "Python 中如何定义和使用函数？定义函数有哪些好处？", "positive": "Python 使用 def 定义函数，例如 def add(a, b): return a + b。函数可以有参数和返回值，能封装可复用逻辑，提高代码复用性，减少重复代码。", "negative": "Python 使用 function 关键字定义函数；函数不能有参数和返回值，定义函数会增加重复代码。"}
+{"query": "try/except 异常处理的作用是什么？文档提到哪些常见异常？", "positive": "try/except 用于捕获异常，避免程序因运行时错误直接退出。文档提到的常见异常包括 ValueError、TypeError、FileNotFoundError、KeyError、IndexError 等。", "negative": "try/except 会让异常直接导致程序退出，且文档提到常见异常只有 UnicodeError。"}
+{"query": "Python 推荐使用什么方式读写文件？", "positive": "推荐使用 with open 语句，它会在代码块结束后自动关闭文件。读取可用 with open('demo.txt', 'r', encoding='utf-8') as f: content = f.read()；写入可用 with open('demo.txt', 'w', encoding='utf-8') as f: f.write('hello')。", "negative": "读取文件时应使用 modes='r'，写入时也要用模式 'r'，并且必须手动调用 f.close()。"}
+{"query": "模块、包和 import 各指什么？文档提到的标准库模块有哪些？", "positive": "模块是一个 Python 文件，包是包含多个模块的目录，import 用于导入模块。文档提到的标准库模块有 os、sys、json、datetime、pathlib、subprocess、csv。", "negative": "模块是包含多个包的目录，包是一个 Python 文件，import 不需要编写；文档提到的标准库模块有 requests、numpy、pandas。"}
+{"query": "Python 项目为什么要使用虚拟环境？文档中提到如何使用 uv 管理依赖？", "positive": "Python 项目使用虚拟环境可以隔离项目依赖，避免依赖冲突。常见虚拟环境目录名包括 .venv 和 venv。文档说明本项目使用 uv 管理依赖，可通过 py -m uv sync 或 py -m uv run 命令运行项目。", "negative": "虚拟环境可以提升 Python 代码的运行速度；本项目使用 pip install 安装的全局依赖，无需隔离。"}
+{"query": "文档中提到的 Python 最佳实践包括哪些？", "positive": "包括：使用有意义的变量名；保持函数职责单一；使用异常处理来处理可预见错误。", "negative": "最佳实践包括：使用短变量名、让函数处理尽量多的事情、忽略所有异常。"}
+{"query": "在依赖管理方面，按照知识库规范，应该怎么做？", "positive": "使用虚拟环境管理依赖。", "negative": "将所有依赖直接安装到系统全局环境，不使用虚拟环境。"}
+{"query": "按照代码规范，对于关键逻辑应该如何处理？", "positive": "对关键逻辑添加必要注释。", "negative": "关键逻辑要保密，不能写任何注释。"}
+{"query": "如何保持代码风格统一？", "positive": "使用格式化工具保持代码风格统一。", "negative": "依赖人工手动对齐缩进，不需要工具。"}
+{"query": "在代码中如何处理 API Key、密码等敏感信息？", "positive": "避免把 API Key、密码等敏感信息写死在代码中。", "negative": "可以把 API Key 直接写死在代码中，方便其他开发者使用。"}
+{"query": "数据库相比普通文件有哪些优势？", "positive": "数据库相比普通文件具有结构化查询、事务、索引、并发控制、权限管理等能力，能持久化保存应用数据。", "negative": "数据库相比普通文件没有任何优势，只是存储格式不同。"}
+{"query": "常见的关系型数据库有哪些？", "positive": "常见关系型数据库包括 PostgreSQL、MySQL、SQLite、SQL Server、Oracle。", "negative": "常见关系型数据库包括 Redis、MongoDB、Elasticsearch。"}
+{"query": "在 SQL 中，SELECT 语句的作用是什么？", "positive": "SELECT 用于查询数据。", "negative": "SELECT 用于插入数据。"}
+{"query": "data_dictionary 表中的 key 字段通常需要设置什么约束？为什么？", "positive": "通常需要设置唯一约束，因为每个配置项只能有一个当前值。", "negative": "通常需要设置主键约束且必须自增，因为每行都需要唯一标识。"}
+{"query": "当插入数据违反唯一约束时，PostgreSQL 会返回什么错误？", "positive": "PostgreSQL 会报 duplicate key value violates unique constraint。", "negative": "PostgreSQL 会报 null value in column violates not-null constraint。"}
+{"query": "PostgreSQL 中 SERIAL 字段有什么作用？", "positive": "PostgreSQL 中 SERIAL 字段会自动创建序列，用来生成递增的 id。", "negative": "PostgreSQL 中 SERIAL 字段用于存储序列化对象，不能生成自增 id。"}
+{"query": "手动插入了id后未同步更新自增序列，会产生什么问题？如何修复？", "positive": "手动插入id且未同步更新序列，后续自动插入时可能生成已经存在的id，导致主键冲突。修复序列常用SQL：SELECT setval(pg_get_serial_sequence('public.data_dictionary','id'), COALESCE((SELECT MAX(id) FROM public.data_dictionary),1), true);", "negative": "手动插入id无需更新序列，数据库会自动调整；若主键冲突，直接删除已存在的记录即可。"}
+{"query": "在知识库系统中，知识空间和文件通常是什么关系？为什么？", "positive": "在知识库系统中，知识空间和文件通常是一对多关系，一个知识空间可以有多个文件。例如 file 表中的 collection_id 可以关联 collection 表中的 uuid，表示文件属于哪个知识空间。", "negative": "知识空间和文件是多对多关系，一个文件可以属于多个知识空间，这与知识库系统设计一致。"}
+{"query": "如果经常根据 collection_id 查询文件，应该给 file.collection_id 创建什么索引？如果经常进行全文检索，应该给什么字段创建什么索引？", "positive": "如果经常根据 collection_id 查询文件，可以给 file.collection_id 创建 B-tree 索引；如果经常进行全文检索，可以给 tsvector 字段创建 GIN 索引。", "negative": "无论什么查询场景，都应该给所有字段创建 GIN 索引，不需要区分。"}
+{"query": "请简要介绍 pgvector 及其创建向量字段的方法，vector(1024) 表示什么？", "positive": "pgvector 是 PostgreSQL 的向量扩展，用于存储和检索 embedding 向量。安装 pgvector 后可以创建 vector 类型字段：CREATE EXTENSION IF NOT EXISTS vector; CREATE TABLE embedding ( uuid UUID PRIMARY KEY, embedding_vector vector(1024) ); 其中 vector(1024) 表示每条向量有 1024 个维度，维度必须和 embedding 模型输出维度一致。", "negative": "pgvector 是一个独立的向量数据库系统，不需要安装在 PostgreSQL 中，vector(1024) 表示该字段最多可以存储 1024 行数据。"}
+{"query": "典型 RAG 系统可能包含哪几张表？请分别说明它们的作用。", "positive": "一个典型 RAG 系统可能包含：user（用户信息）、collection（知识空间）、file（上传文件信息）、chunk（文件切分后的文本片段）、embedding（文本片段对应的向量数据）、data_dictionary（系统配置，例如模型路径、API Key、提示词和检索参数）。在 RAGChat 项目中，后端启动时会读取 data_dictionary 表中的 embeddings_path，用于初始化 embedding 模型。", "negative": "典型 RAG 系统只需一张大表存储所有用户、文件、片段和向量数据即可，不需要拆分成多张表。"}
+{"query": "在 RAGChat 项目中，data_dictionary 表的作用是什么？后端启动时会读取哪个字段？", "positive": "data_dictionary 是系统配置表，存储模型路径、API Key、提示词和检索参数等配置。在 RAGChat 项目中，后端启动时会读取 data_dictionary 表中的 embeddings_path，用于初始化 embedding 模型。", "negative": "data_dictionary 表主要存储用户的聊天记录和历史消息，后端启动时会读取 user_id 字段。"}
+{"query": "请列举常见的数据库问题及其排查方法。", "positive": "常见数据库问题包括：1.数据库连接失败：检查主机、端口、用户名、密码、数据库名；2.表不存在：检查是否执行了建表 SQL；3.扩展不存在：检查 pgvector 是否安装；4.主键冲突：检查是否重复插入相同 id；5.自增序列错位：使用 setval 修复序列；6.中文乱码：确认数据库编码和 SQL 文件编码都是 UTF-8。", "negative": "常见的数据库问题只有连接失败；遇到中文乱码只需改 SQL 文件编码，与数据库编码无关。"}
+{"query": "项目部署时，数据库初始化有哪些建议？", "positive": "项目部署时建议准备初始化 SQL，包含建库、建表、扩展创建、索引创建和基础数据插入。如果项目没有自动建表逻辑，就需要在启动后端之前手动完成数据库初始化。数据库准备完成后，后端才能正常读取用户、知识空间、配置项和知识库数据。", "negative": "项目部署时无需准备初始化 SQL，后端启动时会自动建库、建表并插入所有基础数据，不需要人工干预。"}
+{"query": "外键关系有哪些常见类型？file 表的 collection_id 关联 collection 表的哪个字段？", "positive": "常见外键关系包括一对一、一对多、多对多。例如 file 表中的 collection_id 可以关联 collection 表中的 uuid，表示文件属于哪个知识空间。", "negative": "常见外键关系只有一对多；file 表的 collection_id 关联 collection 表的 id 字段。"}
+{"query": "在 setval 修复序列的 SQL 中，COALESCE 的作用是什么？如果 data_dictionary 表为空会怎样？", "positive": "COALESCE 会在查询 MAX(id) 结果为 NULL（即表为空）时返回默认值 1，避免 setval 使用 NULL 而出错。修复 SQL：SELECT setval(pg_get_serial_sequence('public.data_dictionary','id'), COALESCE((SELECT MAX(id) FROM public.data_dictionary),1), true);", "negative": "COALESCE 的作用是忽略所有空值，如果表为空则 setval 会把序列值设置为 NULL，这是正确行为。"}
+{"query": "Web后端的主要作用是什么？", "positive": "Web后端主要负责处理客户端请求、执行业务逻辑、访问数据库、调用第三方服务，并把处理结果返回给前端。在前后端分离项目中，前端负责页面展示和用户交互，后端负责数据和业务能力，前端通过HTTP请求调用后端接口。", "negative": "Web后端主要负责页面展示和用户交互，前端负责数据和业务能力。"}
+{"query": "HTTP方法中PUT和PATCH有什么区别？", "positive": "PUT是整体更新资源，PATCH是局部更新资源。", "negative": "PUT是局部更新资源，PATCH是整体更新资源。"}
+{"query": "HTTP状态码401和403分别表示什么？", "positive": "401表示未认证，403表示无权限。", "negative": "401表示无权限，403表示未认证。"}
+{"query": "在REST API设计中，如果想创建一个新的知识空间，应该使用哪种HTTP方法和路径？", "positive": "应该使用POST方法，路径为/api/v1/collections/，因为REST API通常围绕资源设计，示例中创建知识空间对应POST /api/v1/collections/。", "negative": "应该使用PUT方法，路径为/api/v1/collections/{uuid}，因为PUT用于创建新资源。"}
+{"query": "FastAPI有哪些主要特点？", "positive": "FastAPI基于Starlette和Pydantic，支持异步编程（async和await）、自动生成Swagger文档、使用Pydantic进行请求参数校验、支持依赖注入，并且性能较好，适合构建接口服务。", "negative": "FastAPI基于Django和Flask，不支持异步编程，也不能自动生成接口文档。"}
+{"query": "Uvicorn在FastAPI项目中起什么作用？", "positive": "Uvicorn是一个ASGI服务器，常用于运行FastAPI应用。例如启动命令为uvicorn src.main:app --host 127.0.0.1 --port 8000 --reload；在RAGChat项目中，server.py内部调用uvicorn.run(\\src.main:app\\\")启动后端服务。\"", "negative": "Uvicorn是一个WSGI服务器，只能用于运行Django应用，不能运行FastAPI应用。"}
+{"query": "后端接口统一返回结构中，code、message、data分别代表什么？", "positive": "code用于表示业务状态，message用于描述结果，data用于返回业务数据。常见结构为{\\code\\\":0", "negative": "\\\"message\\\":\\\"success\\\""}
+{"query": "FastAPI中如何解决跨域问题？", "positive": "FastAPI中可以使用CORSMiddleware配置跨域，常见配置包括allow_origins、allow_methods、allow_headers等。", "negative": "FastAPI中需要通过修改浏览器设置来解决跨域问题，无法在后端配置。"}
+{"query": "FastAPI接收文件上传时通常使用什么格式和类型？", "positive": "通常使用multipart/form-data格式，FastAPI可以通过UploadFile和File接收上传文件。", "negative": "通常使用application/json格式，FastAPI可以通过JSONBody和FormData接收上传文件。"}
+{"query": "知识库系统中上传文件后，除了保存文件外还需要做什么？", "positive": "上传文件后，后端通常需要校验文件类型、保存文件到本地或对象存储、记录文件元数据到数据库、根据业务需要解析文件内容；在知识库系统中，还需要进行文本切分和向量化。", "negative": "上传文件后只需保存文件即可，不需要校验类型，也不需要解析内容或向量化。"}
+{"query": "后端项目通常需要配置哪些参数？", "positive": "数据库地址、API Key、模型路径、服务端口等参数。", "negative": "只需要配置服务端口即可运行。"}
+{"query": "后端项目常见配置方式包括哪些？", "positive": "YAML配置文件、.env环境变量文件、数据库配置表、命令行参数。", "negative": "只能使用YAML配置文件，其他方式不支持。"}
+{"query": "RAGChat项目中的数据库连接配置在哪个文件中？", "positive": "conf.yaml。", "negative": "data_dictionary表。"}
+{"query": "RAGChat项目中模型和提示词配置保存在哪里？", "positive": "data_dictionary表。", "negative": "conf.yaml。"}
+{"query": "如果前端请求失败，首先应该检查什么？", "positive": "后端是否启动。", "negative": "检查数据库表结构。"}
+{"query": "如果端口不一致，应检查什么？", "positive": "前端接口地址配置。", "negative": "检查后端控制台日志。"}
+{"query": "如果接口返回500，应如何排查？", "positive": "查看后端控制台日志。", "negative": "立刻修改文件上传路径权限。"}
+{"query": "如果数据库报错，应检查哪些方面？", "positive": "连接配置、表结构和数据。", "negative": "检查模型路径和模型文件是否完整。"}
+{"query": "文件上传失败时，应检查哪些内容？", "positive": "文件类型、文件大小和保存路径权限。", "negative": "检查API Key是否配置正确。"}
+{"query": "模型初始化失败时，应检查什么？", "positive": "模型路径和模型文件是否完整。", "negative": "检查前端接口地址。"}

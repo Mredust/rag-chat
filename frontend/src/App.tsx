@@ -54,6 +54,7 @@ export default function App() {
             <Route path="/ml/eval" element={<EvalListPage />} />
             <Route path="/ml/eval/new" element={<EvalCreatePage />} />
             <Route path="/ml/eval/dimension/new" element={<EvalDimensionCreatePage />} />
+            <Route path="/ml/eval/dimension/:dimensionId" element={<EvalDimensionCreatePage />} />
             <Route path="/ml/leaderboard/:leaderboardId" element={<LeaderboardDetailPage />} />
             <Route path="/ml/eval/:taskId" element={<EvalDetailPage />} />
             <Route path="/settings" element={<SettingsPage />} />

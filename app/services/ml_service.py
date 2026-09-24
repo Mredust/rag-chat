@@ -49,6 +49,7 @@ from app.models.ml import (
 from app.rag.reranker import build_reranker, lexical_score
 from app.services import config_service
 from app.utils import prompt_loader
+from app.utils.paths import to_abs_path, to_rel_path
 
 logger = logging.getLogger(__name__)
 
@@ -273,7 +274,7 @@ def _save_dataset_file(dataset_id: str, version: int, filename: str, content: by
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / filename
     path.write_bytes(content)
-    return str(path)
+    return to_rel_path(path)
 
 
 def _remove_version_files(dataset_id: str, version: int) -> None:
@@ -364,6 +365,65 @@ _GENERATE_TASKS: dict[str, asyncio.Task] = {}
 def _build_generate_prompt(content: str, count: int) -> str:
     """加载 prompts/dataset_generate.txt 模板并填充变量。"""
     return prompt_loader.format_prompt("dataset_generate", count=count, content=content)
+
+
+def get_eval_prompt_templates() -> dict:
+    """加载 prompts/ 下的大模型评估评分器模板（分类型 + 数值型），供前端创建维度时选用。"""
+
+    def _load(name: str) -> str:
+        try:
+            return prompt_loader.load_prompt(name)
+        except FileNotFoundError:
+            logger.warning("评测 prompt 模板缺失: %s", name)
+            return ""
+
+    return {
+        "classify": {
+            "standard": {
+                "label": "标准匹配",
+                "labels": {"pass": "Pass", "fail": "Fail"},
+                "prompt": _load("eval_classify_standard"),
+            },
+            "sentiment": {
+                "label": "情感分析",
+                "labels": {"pass": "积极", "fail": "中性、消极"},
+                "prompt": _load("eval_classify_sentiment"),
+            },
+        },
+        "numeric": {
+            "overall": {
+                "label": "综合评测",
+                "threshold": 3,
+                "prompt": _load("eval_numeric_overall"),
+            },
+            "similarity": {
+                "label": "语义相似度",
+                "threshold": 4,
+                "prompt": _load("eval_numeric_similarity"),
+            },
+            "hallucination": {
+                "label": "幻觉率",
+                "threshold": 4,
+                "name": "幻觉率",
+                "description": "评估回答是否存在事实错误或幻觉，1~5分，得分越高表示幻觉越少",
+                "prompt": _load("eval_numeric_hallucination"),
+            },
+            "relevance": {
+                "label": "答案相关性",
+                "threshold": 3,
+                "name": "答案相关性",
+                "description": "评估回答与问题的相关程度，1~5分，得分越高表示越切题",
+                "prompt": _load("eval_numeric_relevance"),
+            },
+            "completeness": {
+                "label": "答案完整性",
+                "threshold": 3,
+                "name": "答案完整性",
+                "description": "评估回答是否覆盖问题所需的所有必要信息，1~5分，得分越高表示越完整",
+                "prompt": _load("eval_numeric_completeness"),
+            },
+        },
+    }
 
 
 def _extract_csv_text(raw: str) -> str:
@@ -664,12 +724,8 @@ async def create_model(db: AsyncSession, data) -> MLModel:
 
 
 def _rel_model_dir(path: Path) -> str:
-    """将模型目录转为项目根目录下的相对路径（前面带路径分隔符）。"""
-    try:
-        rel = path.resolve().relative_to(BASE_DIR.resolve())
-    except ValueError:
-        return str(path)
-    return os.sep + str(rel)
+    """将模型目录转为项目根目录下的相对路径（不含盘符与前导分隔符）。"""
+    return to_rel_path(path)
 
 
 def _resolve_model_dir(model_dir: str) -> Path | None:
@@ -1825,7 +1881,7 @@ async def _run_train_task(task_id: str) -> None:
             task.output_model_name = _train_output_name(task)
             output_dir = _train_output_dir(task)
             output_dir.mkdir(parents=True, exist_ok=True)
-            task.output_dir = str(output_dir)
+            task.output_dir = to_rel_path(output_dir)
             (output_dir / "config.json").write_text(
                 json.dumps(_build_output_model_config(task), ensure_ascii=False, indent=2),
                 encoding="utf-8",
@@ -1887,6 +1943,50 @@ async def create_dimension(db: AsyncSession, data) -> MLEvalDimension:
 async def get_dimension(db: AsyncSession, dimension_id: str) -> MLEvalDimension | None:
     result = await db.execute(select(MLEvalDimension).where(MLEvalDimension.id == dimension_id))
     return result.scalar_one_or_none()
+
+
+async def update_dimension(db: AsyncSession, dim: MLEvalDimension, data) -> MLEvalDimension:
+    """更新评测维度；名称变更时同步刷新引用该维度的排行榜与评测任务 dimension_names 快照。"""
+    old_name = dim.name
+    dim.name = data.name
+    dim.description = data.description
+    dim.eval_type = data.eval_type
+    dim.eval_config = data.eval_config
+    await db.commit()
+    await db.refresh(dim)
+    if old_name != dim.name:
+        await sync_dimension_name_snapshots(db, dim.id)
+    return dim
+
+
+async def sync_dimension_name_snapshots(db: AsyncSession, dimension_id: str) -> None:
+    """对比 dimension_id 关联的排行榜 / 评测任务 dimension_names，不一致才写回。"""
+    changed = False
+
+    lb_result = await db.execute(select(MLLeaderboard))
+    for lb in lb_result.scalars().all():
+        ids = list(lb.dimension_ids or [])
+        if dimension_id not in ids:
+            continue
+        new_names = await _dimension_names(db, ids)
+        if list(lb.dimension_names or []) != new_names:
+            lb.dimension_names = new_names
+            flag_modified(lb, "dimension_names")
+            changed = True
+
+    task_result = await db.execute(select(MLEvalTask))
+    for task in task_result.scalars().all():
+        ids = list(task.dimension_ids or [])
+        if dimension_id not in ids:
+            continue
+        new_names = await _dimension_names(db, ids)
+        if list(task.dimension_names or []) != new_names:
+            task.dimension_names = new_names
+            flag_modified(task, "dimension_names")
+            changed = True
+
+    if changed:
+        await db.commit()
 
 
 async def _dimension_names(db: AsyncSession, dimension_ids: list[str]) -> list[str]:
@@ -2057,7 +2157,6 @@ def _dim_result(dim: dict, ranks: dict[str, int | None], llm_trace: dict, rec: d
 
     - 检索评估：召回率/问答准确率 -> 命中/正确 分类型；MRR -> 数值型（1/rank）
     - 大模型评估-分类型 -> 取裁判结论 Pass/Fail；数值型 -> 幻觉评分（1~5 分）
-    - 规则评估-文本相似度 -> 0~1 相似度
     - 统计评估-Spearman相关系数 -> 单样本模型打分（value）与人工评分（human），聚合时计算相关系数
     """
     eval_type = dim.get("eval_type", "llm_classify")
@@ -2105,10 +2204,8 @@ def _dim_positive(dim: dict, res: dict) -> bool:
     eval_type = dim.get("eval_type", "llm_classify")
     cfg = dim.get("eval_config") or {}
     if "value" in res and "label" not in res:
-        if eval_type == "rule_sim":
-            return float(res["value"]) >= float(cfg.get("threshold", 0.8) or 0.8)
         if eval_type == "llm_numeric":
-            return float(res["value"]) >= 3.0
+            return float(res["value"]) >= float(cfg.get("threshold", 3.0) or 3.0)
         if eval_type == "spearman":
             return float(res["value"]) >= float(cfg.get("threshold", 0.5) or 0.5)
         return float(res["value"]) >= 0.5
@@ -2354,7 +2451,7 @@ async def _load_eval_records(db: AsyncSession, dataset_id: str) -> list[dict]:
         p = p.strip()
         if not p:
             continue
-        path = Path(p)
+        path = to_abs_path(p)
         if not path.exists():
             continue
         try:
@@ -2664,11 +2761,6 @@ async def _eval_dim_realtime(dim, rec, rank_map, judge_clients, sem):
     cfg = dim.get("eval_config") or {}
     if et in ("retrieval", "spearman"):
         return _dim_result(dim, rank_map, {}, rec), None
-    if et == "rule_sim":
-        field_a = _render_variables(cfg.get("field_a", "${positive}"), rec)
-        field_b = _render_variables(cfg.get("field_b", "${negative}"), rec)
-        val = _text_similarity(field_a, field_b, cfg.get("metric", "FUZZY_MATCH"))
-        return {"value": round(val, 4)}, None
     if et == "llm_classify":
         prompt = _render_variables(cfg.get("prompt", ""), rec)
         raw = await _judge_classify(judge_clients.get(dim["name"]), prompt, cfg, sem)

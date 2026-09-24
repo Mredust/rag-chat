@@ -8,10 +8,9 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Callable
 
-from app.core.config import BASE_DIR
+from app.utils.paths import to_abs_path
 
 RetrievedChunk = dict
 
@@ -96,9 +95,7 @@ def build_reranker(cfg: dict[str, str]) -> Reranker:
     if enabled and model:
         try:
             # 相对路径基于项目根目录拼接（如 rerankers/bge-reranker-base）
-            model_path = Path(model)
-            if not model_path.is_absolute():
-                model_path = BASE_DIR / model_path
+            model_path = to_abs_path(model)
             logger.info("重排序模型准备：加载交叉编码器 %s", model_path)
             return Reranker(score_fn=CrossEncoderReranker(str(model_path)))
         except Exception as exc:  # noqa: BLE001 - 交叉编码器不可用则回退

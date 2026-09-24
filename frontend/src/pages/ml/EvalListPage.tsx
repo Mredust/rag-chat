@@ -291,7 +291,7 @@ export default function EvalListPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={load} className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50" title="刷新">
+          <button type="button" onClick={() => load()} className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50" title="刷新">
             <RefreshCw size={14} />
           </button>
           {primaryBtn()}
@@ -533,10 +533,16 @@ export default function EvalListPage() {
                     <td className="px-4 py-3 text-slate-600 max-w-xs truncate">{d.description || '-'}</td>
                     <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{formatDate(d.created_at)}</td>
                     <td className="px-4 py-3">
-                      <button type="button" onClick={() => setDeleteTarget({ kind: 'dimension', id: d.id, name: d.name })} className="flex items-center gap-1 text-xs text-red-500 hover:underline">
-                        <Trash2 size={13} />
-                        删除
-                      </button>
+                      <div className="flex items-center gap-3 text-xs">
+                        <button type="button" onClick={() => navigate(`/ml/eval/dimension/${d.id}`)} className="flex items-center gap-1 text-indigo-600 hover:underline">
+                          <Pencil size={13} />
+                          编辑
+                        </button>
+                        <button type="button" onClick={() => setDeleteTarget({ kind: 'dimension', id: d.id, name: d.name })} className="flex items-center gap-1 text-red-500 hover:underline">
+                          <Trash2 size={13} />
+                          删除
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

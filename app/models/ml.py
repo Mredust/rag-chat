@@ -154,7 +154,6 @@ class MLEvalDimension(Base):
     - llm_classify   大模型评估-分类型
     - llm_numeric    大模型评估-数值型
     - rule_match     规则评估-字符串匹配
-    - rule_sim       规则评估-文本相似度
     - manual         人工评估
     """
 
