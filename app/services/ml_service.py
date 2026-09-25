@@ -1644,7 +1644,6 @@ def _do_real_train(
     val_accs: list[float] = []
     lrs: list[float] = []
 
-    os.makedirs(output_dir, exist_ok=True)
     model.train()
     # 每 epoch 内按步汇报进度：步数少时每步都报，步数多时约每 10% 报一次，避免海量日志
     report_interval = max(1, steps_per_epoch // 10)
@@ -1701,6 +1700,8 @@ def _do_real_train(
             progress_cb(epoch, avg_loss, val_loss, val_acc)
 
     # 保存真实微调产出的完整模型（权重 / 配置 / 分词器），可被「我的模型」与评测真实加载
+    # 目录在训练全部成功后才创建：训练中途失败不会在 models/ftm 下留下空的产出文件夹
+    os.makedirs(output_dir, exist_ok=True)
     model.save(str(output_dir))
     logger.info("真实微调：模型已保存 output_dir=%s", output_dir)
 
@@ -1774,8 +1775,11 @@ async def _run_train_task(task_id: str) -> None:
         ]
 
         # 阶段2：训练配置
+        train_device = resolve_torch_device()
+        device_kind = "GPU" if train_device.split(":")[0].lower() in ("cuda", "mps", "xpu", "npu") else "CPU"
         lines += [
-            "[CONFIG] 开始真实微调训练（sentence-transformers + MultipleNegativesRankingLoss + 难负样本）",
+            "[CONFIG] 开始微调训练：sentence-transformers + MultipleNegativesRankingLoss",
+            f"[CONFIG] 训练设备: {device_kind}（{train_device}）",
             f"[CONFIG] 基础模型: {task.base_model}",
             f"[CONFIG] 训练轮数: {num_epochs}",
             f"[CONFIG] 批次大小: {batch_size}",
@@ -1845,6 +1849,10 @@ async def _run_train_task(task_id: str) -> None:
             except RuntimeError:
                 pass
 
+        # 产出目录：训练失败时若目录是本次运行新建的则回滚，避免 models/ftm 下残留未完成的文件夹
+        output_dir = _train_output_dir(task)
+        output_dir_existed = output_dir.exists()
+
         try:
             if task.id in _STOP_FLAGS:
                 return
@@ -1871,7 +1879,7 @@ async def _run_train_task(task_id: str) -> None:
                 weight_decay=weight_decay,
                 query_max_len=query_max_len,
                 passage_max_len=passage_max_len,
-                output_dir=_train_output_dir(task),
+                output_dir=output_dir,
                 progress_cb=_progress_cb,
                 step_cb=_step_cb,
             )
@@ -1898,7 +1906,6 @@ async def _run_train_task(task_id: str) -> None:
             ]
 
             task.output_model_name = _train_output_name(task)
-            output_dir = _train_output_dir(task)
             output_dir.mkdir(parents=True, exist_ok=True)
             task.output_dir = to_rel_path(output_dir)
             (output_dir / "config.json").write_text(
@@ -1931,6 +1938,10 @@ async def _run_train_task(task_id: str) -> None:
             logger.exception("训练任务失败: %s", exc)
             task.status = "failed"
             task.log = "\n".join(lines + [f"[ERROR] {exc}"])
+            # 回滚本次失败运行新建的产出目录（训练前已存在的同名模型不受影响）
+            if not output_dir_existed and output_dir.exists():
+                shutil.rmtree(output_dir, ignore_errors=True)
+                logger.info("训练任务失败，已清理未完成的产出目录: %s", output_dir)
         finally:
             _STOP_FLAGS.discard(task.id)
             await db.commit()
