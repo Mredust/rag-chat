@@ -31,15 +31,19 @@ const SPEARMAN_SIM_METHODS = [
 ]
 
 /* 大模型评估-分类型 评分器模板（prompt 正文从 prompts/ 经接口加载） */
-const CLASSIFY_TEMPLATES: Record<string, { label: string; prompt: string; labels: { pass: string; fail: string } }> = {
+const CLASSIFY_TEMPLATES: Record<string, { label: string; prompt: string; labels: { pass: string; fail: string }; name: string; description: string }> = {
   standard: {
     label: '标准匹配',
     labels: { pass: 'Pass', fail: 'Fail' },
+    name: '准确率',
+    description: '根据评分器标准判断回答是否正确，结果为 Pass / Fail',
     prompt: '',
   },
   sentiment: {
     label: '情感分析',
     labels: { pass: '积极', fail: '中性、消极' },
+    name: '情感分析',
+    description: '判断回答的情感倾向，积极为 Pass，中性、消极为 Fail',
     prompt: '',
   },
 }
@@ -49,11 +53,15 @@ const NUMERIC_TEMPLATES: Record<string, { label: string; prompt: string; thresho
   overall: {
     label: '综合评测',
     threshold: 3,
+    name: '综合评测',
+    description: '综合评估回答的整体质量（准确性、相关性、完整性等），1~5分，得分越高表示表现越好',
     prompt: '',
   },
   similarity: {
     label: '语义相似度',
     threshold: 4,
+    name: '语义相似度',
+    description: '评估回答与参考答案的语义相似程度，1~5分，得分越高表示越相似',
     prompt: '',
   },
   hallucination: {
@@ -79,6 +87,24 @@ const NUMERIC_TEMPLATES: Record<string, { label: string; prompt: string; thresho
   },
 }
 
+/* 可被模板回填的维度名称/描述特征：判断基础信息是否为模板默认值（不覆盖用户自定义内容） */
+const TEMPLATE_NAME_SET = new Set(
+  [...Object.values(CLASSIFY_TEMPLATES), ...Object.values(NUMERIC_TEMPLATES)]
+    .map((t) => (t.name || '').trim())
+    .filter(Boolean),
+)
+const TEMPLATE_DESC_BASES = [...new Set(
+  [...Object.values(CLASSIFY_TEMPLATES), ...Object.values(NUMERIC_TEMPLATES)]
+    .map((t) => (t.description || '').split('，')[0].trim())
+    .filter(Boolean),
+)]
+const canBackfillName = (s: string) => !s.trim()
+  || TEMPLATE_NAME_SET.has(s.trim())
+  || /^(召回率|平均倒数排名|向量检索|全文检索|混合检索|重排序检索)@\d+$/.test(s.trim())
+const canBackfillDesc = (s: string) => !s.trim()
+  || TEMPLATE_DESC_BASES.some((b) => s.trim().startsWith(b))
+  || isRecallDesc(s)
+
 /* 描述中追加/刷新「通过阈值N」后缀 */
 function withThresholdDesc(desc: string, threshold: number): string {
   const base = desc.replace(/[，,]?\s*通过阈值[\d.]+/g, '').trim()
@@ -90,6 +116,16 @@ function withThresholdDesc(desc: string, threshold: number): string {
 function retrievalName(metricKey: string, k: number): string {
   const m = RETRIEVAL_METRICS.find((x) => x.key === metricKey)
   return m ? `${m.name}@${k}` : ''
+}
+
+/* 召回率描述回填：K 随 Recall 值联动，如 正确答案是否排在前1位 */
+function recallDesc(k: number): string {
+  return `正确答案是否排在前${k}位`
+}
+
+/* 判断描述是否为召回率模板描述（可随 Recall 值联动更新） */
+function isRecallDesc(desc: string): boolean {
+  return /^正确答案是否排在前/.test(desc.trim())
 }
 
 export default function EvalDimensionCreatePage() {
@@ -218,6 +254,9 @@ export default function EvalDimensionCreatePage() {
     setClassifyPrompt(t.prompt)
     setLabels(t.labels)
     userEditedPrompt.current = false
+    // 按模板回填上方基础信息：维度名称与描述
+    setName(t.name)
+    setDescription(t.description)
   }
 
   const chooseNumericTemplate = (key: string) => {
@@ -231,6 +270,21 @@ export default function EvalDimensionCreatePage() {
     if (t.name) setName(t.name)
     if (t.description) nextDesc = t.description
     setDescription(withThresholdDesc(nextDesc, t.threshold))
+  }
+
+  /* 切换类型时按当前模板回填基础信息（仅基础信息仍为模板默认值时才覆盖） */
+  const backfillBasicsForType = (type: string) => {
+    if (type === 'llm_classify') {
+      const t = CLASSIFY_TEMPLATES[classifyTemplate]
+      if (!t) return
+      if (canBackfillName(name)) setName(t.name)
+      if (canBackfillDesc(description)) setDescription(t.description)
+    } else if (type === 'llm_numeric') {
+      const t = NUMERIC_TEMPLATES[numericTemplate]
+      if (!t || !t.name || !t.description) return
+      if (canBackfillName(name)) setName(t.name)
+      if (canBackfillDesc(description)) setDescription(withThresholdDesc(t.description, t.threshold))
+    }
   }
 
   const buildConfig = (): Record<string, unknown> => {
@@ -354,7 +408,10 @@ export default function EvalDimensionCreatePage() {
                   <button
                     key={t.value}
                     type="button"
-                    onClick={() => setEvalType(t.value)}
+                    onClick={() => {
+                      setEvalType(t.value)
+                      if (!isEdit) backfillBasicsForType(t.value)
+                    }}
                     className={`rounded-lg border px-4 py-2 text-sm transition-colors ${evalType === t.value
                       ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
                       : 'border-slate-200 text-slate-600 hover:border-slate-300'
@@ -541,7 +598,8 @@ export default function EvalDimensionCreatePage() {
                         setRetrievalMetric(m.key)
                         const k = m.key === 'recall_at_5' ? recallK : topK
                         setName(retrievalName(m.key, k))
-                        setDescription(m.desc)
+                        // 召回率的描述随 K 值联动回填
+                        setDescription(m.key === 'recall_at_5' ? recallDesc(k) : m.desc)
                       }}
                       className={`rounded-lg border px-4 py-2 text-sm transition-colors ${retrievalMetric === m.key
                         ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
@@ -559,12 +617,14 @@ export default function EvalDimensionCreatePage() {
                   <input
                     type="number"
                     min={1}
-                    max={10}
                     value={recallK}
                     onChange={(e) => {
-                      const k = Math.min(10, Math.max(1, Number(e.target.value) || 1))
+                      // 下限 1，无上限
+                      const k = Math.max(1, Number(e.target.value) || 1)
                       setRecallK(k)
                       setName(retrievalName(retrievalMetric, k))
+                      // 描述中的 K 同步更新，如 正确答案是否排在前1位
+                      setDescription((prev) => (!prev.trim() || isRecallDesc(prev) ? recallDesc(k) : prev))
                     }}
                     className={`${inputCls} w-40`}
                   />

@@ -231,6 +231,16 @@ export interface EvalTraceCheck {
   reason: string
 }
 
+/** 单个维度的裁判大模型评估明细（用于明细弹窗按维度切换查看） */
+export interface EvalTraceLlmDetail {
+  eval_type?: string
+  label?: string | null
+  value?: number | null
+  content?: string
+  tokens?: { input: number; output: number; total: number }
+  judge_model?: string
+}
+
 export interface EvalTrace {
   top_k: number
   vector_rank: number | null
@@ -245,6 +255,8 @@ export interface EvalTrace {
   conclusion?: string
   hallucination?: number
   reason?: string
+  /** 维度名 -> 该维度裁判回答/用量/结论 */
+  llm_details?: Record<string, EvalTraceLlmDetail>
 }
 
 export interface MLEvalTaskDetailItem {
@@ -254,7 +266,7 @@ export interface MLEvalTaskDetailItem {
   negative: string
   label: string
   score: number
-  dims: Record<string, { label?: string; value?: number }>
+  dims: Record<string, { label?: string; value?: number; human?: number }>
   trace?: EvalTrace
 }
 

@@ -71,6 +71,10 @@ PREVIEW_LIMIT = 100 * 1024
 
 # 评测任务单样本裁判打分并发数
 _EVAL_CONCURRENCY = 5
+# 自动切分随机种子（固定以保证同一数据集切分结果可复现）
+_AUTO_SPLIT_SEED = 42
+# 单样本明细里存储的检索文档条数上限（排名计算不受影响，仅限制 JSON 体积）
+_MAX_STORED_TOP_DOCS = 100
 
 # 待终止的评测任务 ID 集合（协作式停止，与训练任务 _STOP_FLAGS 一致）
 _EVAL_STOP_FLAGS: set[str] = set()
@@ -2369,6 +2373,18 @@ def _dim_result(dim: dict, ranks: dict[str, int | None], llm_trace: dict, rec: d
     return {"label": "Pass"}
 
 
+def _dim_top_k(dim: dict) -> int | None:
+    """检索维度展示用的 K 值：Recall@K 取 recall_k，策略准确率取 top_k；非检索维度返回 None。"""
+    if dim.get("eval_type") != "retrieval":
+        return None
+    cfg = dim.get("eval_config") or {}
+    key = "recall_k" if cfg.get("metric") == "recall_at_5" else "top_k"
+    try:
+        return max(1, int(cfg.get(key) or 5))
+    except (TypeError, ValueError):
+        return 5
+
+
 def _dim_positive(dim: dict, res: dict) -> bool:
     """判断单条维度结果是否为正向（用于通过率 / 整体结果汇总）。"""
     eval_type = dim.get("eval_type", "llm_classify")
@@ -2437,14 +2453,18 @@ def _compute_real_ranks(
     reranker,
     records: list[dict],
     top_k: int,
+    rerank_top_k: int | None = None,
 ) -> list[dict]:
-    """在评测数据集候选池上真实执行四种检索策略，返回每个样本正样本的排名与向量 Top-K。
+    """在评测数据集候选池上真实执行四种检索策略，返回每个样本正样本的排名与向量 Top-K 列表。
 
     候选池为测试集全部 positive/negative 去重后的文本集合；对每条 query 用所选向量模型
     encode（本地 sentence-transformers 或远程供应商 Embedding），按 cosine 相似度真实排序，
     得出正样本在四种策略下的排名（1-based；未检到为 None）。阻塞 CPU 计算，应在 asyncio.to_thread 中执行。
 
-    返回 list[dict]，每个元素含 vector/fulltext/hybrid/rerank 排名与 vector_top5 列表。
+    top_k：存储/展示的向量 Top 文档条数（按 Recall@K 等维度的最大 K 决定）；
+    rerank_top_k：重排序候选数的基准（按策略准确率维度的 Top-K 决定，避免召回 K 过大拖慢精排）。
+
+    返回 list[dict]，每个元素含 vector/fulltext/hybrid/rerank 排名与 vector_top5（向量 Top 文档）列表。
     """
     import numpy as np
 
@@ -2469,7 +2489,7 @@ def _compute_real_ranks(
 
     n = len(candidates)
     rrf_k = 60
-    m = min(n, max(top_k, 1) * 3)
+    m = min(n, max(rerank_top_k or top_k, 1) * 3)
 
     results: list[dict] = []
     for i, rec in enumerate(records):
@@ -2547,10 +2567,14 @@ def _compute_real_ranks(
 
 
 def _build_real_llm_trace(positive: str, llm_infos: list[dict], overall_pos: bool) -> dict:
-    """由真实裁判 LLM 输出汇总单样本的大模型评估 trace（结论/回答/各维度/用量等）。"""
+    """由真实裁判 LLM 输出汇总单样本的大模型评估 trace（结论/回答/各维度/用量等）。
+
+    llm_details 按维度名保存该维度的裁判原文/用量/结论，供明细弹窗按维度切换查看。
+    """
     tokens = {"input": 0, "output": 0, "total": 0}
     checks: list[dict] = []
     reasons: list[str] = []
+    llm_details: dict[str, dict] = {}
     hallucination: float | None = None
     judge_model = ""
     for info in llm_infos:
@@ -2561,6 +2585,20 @@ def _build_real_llm_trace(positive: str, llm_infos: list[dict], overall_pos: boo
         if not judge_model and info.get("judge_model"):
             judge_model = str(info["judge_model"])
         content = (info.get("content") or "").strip()
+        dim_name = str(info.get("name") or "")
+        if dim_name:
+            llm_details[dim_name] = {
+                "eval_type": info.get("eval_type"),
+                "label": info.get("label"),
+                "value": info.get("value"),
+                "content": content,
+                "tokens": {
+                    "input": int(t.get("input", 0)),
+                    "output": int(t.get("output", 0)),
+                    "total": int(t.get("total", 0)),
+                },
+                "judge_model": info.get("judge_model") or "",
+            }
         if info.get("eval_type") == "llm_classify":
             passed = info.get("label") in _POSITIVE_LABELS
             checks.append({
@@ -2583,6 +2621,7 @@ def _build_real_llm_trace(positive: str, llm_infos: list[dict], overall_pos: boo
         "hallucination": hallucination,
         "checks": checks,
         "reason": "；".join(reasons) if reasons else "已由裁判大模型完成评估。",
+        "llm_details": llm_details,
     }
 
 
@@ -2670,11 +2709,13 @@ async def _load_eval_task_records(db: AsyncSession, task: MLEvalTask) -> list[di
         records = await _load_eval_records(db, task.split_dataset_id)
         ratio = max(0.0, min(1.0, float(task.split_ratio or 0.1)))
         cut = max(1, int(len(records) * ratio)) if records else 0
+        # 随机切分（固定种子保证同一数据集的切分可复现），避免总取开头/结尾造成顺序偏差
+        split_records = random.Random(_AUTO_SPLIT_SEED).sample(records, cut) if cut else []
         logger.info(
-            "评测任务自动切分: 训练集=%s 总条数=%d 切分比例=%.2f 评测集=%d",
+            "评测任务自动切分: 训练集=%s 总条数=%d 切分比例=%.2f 评测集=%d（随机切分）",
             task.split_dataset_id, len(records), ratio, cut,
         )
-        return records[:cut]
+        return split_records
     return await _load_eval_records(db, task.data_id)
 
 
@@ -2987,6 +3028,17 @@ async def _run_eval_task(task_id: str) -> None:
         await db.commit()
         try:
             dim_metas = await _metric_dims(db, task.dimension_ids or [])
+            # 明细弹窗按维度展示 Top-K 文档：按检索维度的 K 取最大值决定存储条数；
+            # 重排候选数只按策略准确率维度的 Top-K 决定，避免召回 K 过大拖慢精排
+            max_top_docs = 5
+            max_rerank_k = 5
+            for m in dim_metas:
+                k = _dim_top_k(m)
+                if k:
+                    max_top_docs = max(max_top_docs, k)
+                    if (m["eval_config"] or {}).get("metric") != "recall_at_5":
+                        max_rerank_k = max(max_rerank_k, k)
+            max_top_docs = min(max_top_docs, _MAX_STORED_TOP_DOCS)
             judge_clients: dict[str, object] = {}
             for m in dim_metas:
                 if m["eval_type"] in ("llm_classify", "llm_numeric"):
@@ -3022,7 +3074,8 @@ async def _run_eval_task(task_id: str) -> None:
                 runtime_cfg = await config_service.get_runtime(db)
                 reranker = build_reranker(runtime_cfg)
                 real_ranks = await asyncio.to_thread(
-                    _compute_real_ranks, embedder, candidates, reranker, records, 5
+                    _compute_real_ranks, embedder, candidates, reranker, records,
+                    max_top_docs, max_rerank_k,
                 )
             for i, rec in enumerate(records):
                 if task.id in _EVAL_STOP_FLAGS:
@@ -3076,7 +3129,7 @@ async def _run_eval_task(task_id: str) -> None:
                 trace = {
                     "eval_model_type": task.model_type,
                     "eval_model_source": eval_model_source,
-                    "top_k": 5,
+                    "top_k": max_top_docs,
                     "vector_rank": vector_rank,
                     "fulltext_rank": fulltext_rank,
                     "hybrid_rank": hybrid_rank,
@@ -3110,6 +3163,7 @@ async def _run_eval_task(task_id: str) -> None:
                 "name": m["name"],
                 "eval_type": m["eval_type"],
                 "metric": (m["eval_config"] or {}).get("metric") if m["eval_type"] == "retrieval" else None,
+                "k": _dim_top_k(m),
                 "score": _dim_score(m, dim_results[m["name"]]),
             } for m in dim_metas]
             avg = round(sum(s["score"] for s in scores) / len(scores), 4) if scores else 0.0

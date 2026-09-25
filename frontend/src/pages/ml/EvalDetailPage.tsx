@@ -11,7 +11,7 @@ import { badgeCls, badgeLabel } from './constants'
 
 type DetailTab = 'detail' | 'metrics'
 
-type Metric = { name: string; score: number; eval_type?: string; metric?: string | null }
+type Metric = { name: string; score: number; eval_type?: string; metric?: string | null; k?: number | null }
 
 /* 超过 8 个字符的内容截断并追加省略号 */
 function truncateText(s: string, max = 8): string {
@@ -23,18 +23,42 @@ function rankText(r: number | null): string {
   return r == null ? '未命中' : `第 ${r} 位`
 }
 
-/** 评测过程详情弹窗（按维度类型分区块展示） */
+/** 评测过程详情弹窗：顶部下拉切换测评维度，下方展示基本信息与该维度结果 */
 function TraceModal({ item, metrics, onClose }: {
   item: MLEvalTaskDetailItem
   metrics: Metric[]
   onClose: () => void
 }) {
+  const [dimName, setDimName] = useState(metrics[0]?.name ?? '')
   const trace = item.trace
   if (!trace) return null
 
   const hasRetrieval = metrics.some((m) => m.eval_type === 'retrieval' && (m.metric === 'recall_at_5' || m.metric === 'mrr'))
   const hasStrategy = metrics.some((m) => m.eval_type === 'retrieval' && ['vector_qa_accuracy', 'fulltext_qa_accuracy', 'hybrid_qa_accuracy', 'rerank_qa_accuracy'].includes(m.metric ?? ''))
   const hasLlm = metrics.some((m) => m.eval_type === 'llm_classify' || m.eval_type === 'llm_numeric')
+  const hasSpearman = metrics.some((m) => m.eval_type === 'spearman')
+
+  // 当前选中的维度（默认第一个维度；无维度数据时展示全部区块）
+  const sel = metrics.find((m) => m.name === dimName) ?? null
+  // 检索文档展示条数：按选中维度的 K（Recall@K / 策略 Top-K），无选中时回退存储条数
+  const topDocs = Math.max(1, sel?.k ?? trace.top_k ?? 5)
+  const isLlmType = (m: Metric | null) => m?.eval_type === 'llm_classify' || m?.eval_type === 'llm_numeric'
+  const strategyOf: Record<string, string> = {
+    vector_qa_accuracy: '向量检索',
+    fulltext_qa_accuracy: '全文检索',
+    hybrid_qa_accuracy: '混合检索',
+    rerank_qa_accuracy: '重排序检索',
+  }
+
+  // 各区块是否展示：选中具体维度时只展示该维度对应的结果区块
+  const showRetrieval = sel
+    ? sel.eval_type === 'retrieval' && (sel.metric === 'recall_at_5' || sel.metric === 'mrr')
+    : hasRetrieval
+  const showStrategy = sel
+    ? sel.eval_type === 'retrieval' && !!sel.metric && sel.metric in strategyOf
+    : hasStrategy
+  const showLlm = sel ? isLlmType(sel) : hasLlm
+  const showSpearman = sel ? sel.eval_type === 'spearman' : hasSpearman
 
   const strategies = [
     { name: '向量检索', rank: trace.vector_rank },
@@ -42,6 +66,34 @@ function TraceModal({ item, metrics, onClose }: {
     { name: '混合检索', rank: trace.hybrid_rank },
     { name: '重排序检索', rank: trace.rerank_rank },
   ]
+  const visibleStrategies = sel && showStrategy
+    ? strategies.filter((s) => s.name === strategyOf[sel.metric ?? ''])
+    : strategies
+
+  // 大模型评估：选中维度时展示该维度的裁判回答/用量/结论
+  const llmDetail = sel && showLlm ? trace.llm_details?.[sel.name] : undefined
+  const judgeModel = (sel ? llmDetail?.judge_model : undefined) ?? trace.judge_model ?? ''
+  const tokens = (sel ? llmDetail?.tokens : undefined) ?? trace.tokens
+  const llmAnswer = (sel ? llmDetail?.content : undefined) || trace.reason || ''
+  const dimRes = sel ? item.dims[sel.name] : undefined
+  // 分类型取该维度 Pass/Fail；数值型维度无结论，避免用整体结论误导
+  const conclusion = dimRes?.label
+    ?? (sel && sel.eval_type === 'llm_numeric' ? undefined : trace.conclusion)
+  const hallucination = dimRes?.value ?? trace.hallucination
+  const visibleChecks = sel
+    ? (trace.checks ?? []).filter((c) => c.name === sel.name)
+    : (trace.checks ?? [])
+
+  // 统计评估（Spearman）展示的维度行
+  const spearmanDims = (sel ? [sel] : metrics.filter((m) => m.eval_type === 'spearman'))
+    .filter((m) => m.eval_type === 'spearman')
+
+  const dimHint = (name: string) => {
+    const d = item.dims[name]
+    if (!d) return undefined
+    if (d.label) return d.label
+    return d.value != null ? Number(d.value).toFixed(2) : undefined
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
@@ -52,6 +104,17 @@ function TraceModal({ item, metrics, onClose }: {
         </div>
 
         <div className="space-y-5 px-5 py-4">
+          {/* 维度切换：按维度分开展示结果，避免全部挤在一个弹窗里 */}
+          <section>
+            <h4 className="mb-2 text-sm font-medium text-slate-700">测评维度</h4>
+            <Select
+              value={dimName}
+              onChange={setDimName}
+              options={metrics.map((m) => ({ value: m.name, label: m.name, hint: dimHint(m.name) }))}
+              className="w-72"
+            />
+          </section>
+
           {/* 基本信息 */}
           <section>
             <h4 className="mb-2 text-sm font-medium text-slate-700">基本信息</h4>
@@ -63,16 +126,18 @@ function TraceModal({ item, metrics, onClose }: {
           </section>
 
           {/* 检索评估 */}
-          {hasRetrieval && (
+          {showRetrieval && (
             <section>
-              <h4 className="mb-2 text-sm font-medium text-slate-700">检索结果（Top-{trace.top_k}）</h4>
+              <h4 className="mb-2 text-sm font-medium text-slate-700">
+                检索结果（Top-{topDocs}）{sel ? ` · ${sel.name}` : ''}
+              </h4>
               <div className="overflow-hidden rounded-lg border border-slate-200">
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50 text-left text-xs text-slate-500">
                     <tr><th className="px-3 py-2 font-medium">排名</th><th className="px-3 py-2 font-medium">文档内容</th><th className="px-3 py-2 font-medium">相似度分数</th></tr>
                   </thead>
                   <tbody>
-                    {trace.vector_top5.map((doc) => (
+                    {trace.vector_top5.slice(0, topDocs).map((doc) => (
                       <tr key={doc.rank} className="border-t border-slate-100">
                         <td className="px-3 py-2 text-slate-500">{doc.rank}</td>
                         <td className="px-3 py-2 text-slate-700 whitespace-pre-wrap break-words">{doc.content}</td>
@@ -84,24 +149,26 @@ function TraceModal({ item, metrics, onClose }: {
               </div>
               <div className="mt-2 rounded-lg border border-slate-200 p-3 text-sm space-y-1 text-slate-700">
                 <p>Positive 排名：{rankText(trace.vector_rank)}</p>
-                <p>Top-{trace.top_k} 是否包含 Positive：{trace.vector_rank != null && trace.vector_rank <= trace.top_k ? '是' : '否'}</p>
+                <p>Top-{topDocs} 是否包含 Positive：{trace.vector_rank != null && trace.vector_rank <= topDocs ? '是' : '否'}</p>
                 <p>该查询 MRR 贡献：{trace.vector_rank != null ? (1 / trace.vector_rank).toFixed(4) : '0'}</p>
               </div>
             </section>
           )}
 
           {/* 策略评估 */}
-          {hasStrategy && (
+          {showStrategy && (
             <section>
-              <h4 className="mb-2 text-sm font-medium text-slate-700">各策略检索结果对比</h4>
+              <h4 className="mb-2 text-sm font-medium text-slate-700">
+                各策略检索结果对比{sel ? ` · ${sel.name}` : ''}
+              </h4>
               <div className="overflow-hidden rounded-lg border border-slate-200">
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50 text-left text-xs text-slate-500">
-                    <tr><th className="px-3 py-2 font-medium">策略名称</th><th className="px-3 py-2 font-medium">Positive 排名</th><th className="px-3 py-2 font-medium">是否在 Top-{trace.top_k}</th><th className="px-3 py-2 font-medium">该查询贡献得分</th></tr>
+                    <tr><th className="px-3 py-2 font-medium">策略名称</th><th className="px-3 py-2 font-medium">Positive 排名</th><th className="px-3 py-2 font-medium">是否在 Top-{topDocs}</th><th className="px-3 py-2 font-medium">该查询贡献得分</th></tr>
                   </thead>
                   <tbody>
-                    {strategies.map((s) => {
-                      const inTop = s.rank != null && s.rank <= trace.top_k
+                    {visibleStrategies.map((s) => {
+                      const inTop = s.rank != null && s.rank <= topDocs
                       return (
                         <tr key={s.name} className="border-t border-slate-100">
                           <td className="px-3 py-2 text-slate-700">{s.name}</td>
@@ -119,19 +186,50 @@ function TraceModal({ item, metrics, onClose }: {
             </section>
           )}
 
-          {/* 大模型评估 */}
-          {hasLlm && (
+          {/* 统计评估（Spearman）：展示该样本的模型打分与人工评分 */}
+          {showSpearman && (
             <section>
-              <h4 className="mb-2 text-sm font-medium text-slate-700">大模型评估</h4>
+              <h4 className="mb-2 text-sm font-medium text-slate-700">统计评估{sel ? ` · ${sel.name}` : ''}</h4>
+              <div className="overflow-hidden rounded-lg border border-slate-200">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 text-left text-xs text-slate-500">
+                    <tr><th className="px-3 py-2 font-medium">维度</th><th className="px-3 py-2 font-medium">模型打分</th><th className="px-3 py-2 font-medium">人工评分</th></tr>
+                  </thead>
+                  <tbody>
+                    {spearmanDims.map((m) => {
+                      const d = item.dims[m.name] ?? {}
+                      return (
+                        <tr key={m.name} className="border-t border-slate-100">
+                          <td className="px-3 py-2 text-slate-700">{m.name}</td>
+                          <td className="px-3 py-2 text-slate-600">{d.value != null ? Number(d.value).toFixed(4) : '—'}</td>
+                          <td className="px-3 py-2 text-slate-600">{d.human != null ? Number(d.human).toFixed(4) : '—'}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+          {/* 大模型评估 */}
+          {showLlm && (
+            <section>
+              <h4 className="mb-2 text-sm font-medium text-slate-700">大模型评估{sel ? ` · ${sel.name}` : ''}</h4>
               <div className="rounded-lg border border-slate-200 p-3 text-sm">
                 <p className="text-slate-500">RAG 生成回答：</p>
-                <p className="mt-1 text-slate-700">{trace.rag_answer ?? '（无）'}</p>
+                <p className="mt-1 text-slate-700">{trace.rag_answer ?? item.positive}</p>
                 <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-500">
-                  <span>裁判模型：{trace.judge_model ?? '—'}</span>
-                  <span>Token 消耗：{trace.tokens?.total ?? 0}（输入 {trace.tokens?.input ?? 0}，输出 {trace.tokens?.output ?? 0}）</span>
+                  <span>裁判模型：{judgeModel || '—'}</span>
+                  <span>Token 消耗：{tokens?.total ?? 0}（输入 {tokens?.input ?? 0}，输出 {tokens?.output ?? 0}）</span>
+                </div>
+                {/* 裁判大模型的具体回答：用于核对维度评分是否合理 */}
+                <div className="mt-3">
+                  <p className="text-slate-500">大模型回答：</p>
+                  <p className="mt-1 whitespace-pre-wrap break-words text-slate-700">{llmAnswer || '—'}</p>
                 </div>
                 <div className="mt-3 space-y-1.5">
-                  {(trace.checks || []).map((c) => (
+                  {visibleChecks.map((c) => (
                     <p key={c.name} className="flex items-start gap-2">
                       <span className={c.pass ? 'text-green-600' : 'text-red-600'}>{c.pass ? '✅ 通过' : '❌ 未通过'}</span>
                       <span className="text-slate-700">{c.name}：{c.reason}</span>
@@ -139,11 +237,23 @@ function TraceModal({ item, metrics, onClose }: {
                   ))}
                 </div>
                 <div className="mt-3 rounded-lg bg-slate-50 p-2.5">
-                  <p className="text-slate-700">结论：<span className={trace.conclusion === 'Pass' ? 'text-green-600' : 'text-red-600'}>{trace.conclusion === 'Pass' ? '✅ Pass' : '❌ Fail'}</span>　幻觉率：{trace.hallucination ?? '—'} 分</p>
-                  <p className="mt-1 text-slate-500">评测原因：{trace.reason ?? '—'}</p>
+                  <p className="text-slate-700">
+                    结论：
+                    {conclusion
+                      ? <span className={conclusion === 'Pass' ? 'text-green-600' : 'text-red-600'}>{conclusion === 'Pass' ? '✅ Pass' : '❌ Fail'}</span>
+                      : <span className="text-slate-400">—</span>}
+                    　幻觉率：{hallucination ?? '—'} 分
+                  </p>
+                  <p className="mt-1 text-slate-500">评测原因：{llmAnswer || trace.reason || '—'}</p>
                 </div>
               </div>
             </section>
+          )}
+
+          {sel && !showRetrieval && !showStrategy && !showLlm && !showSpearman && (
+            <p className="rounded-lg border border-dashed border-slate-200 p-4 text-center text-sm text-slate-400">
+              该维度无明细过程数据
+            </p>
           )}
         </div>
 
