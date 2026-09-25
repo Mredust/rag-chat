@@ -1525,6 +1525,23 @@ def _retrieval_top1_acc(model, val_pairs: list[dict]) -> float:
     return correct / len(val_pairs) * 100.0
 
 
+def _move_batch_to_model(sentence_features, labels, device):
+    """把 collate 产出的批次搬到模型所在设备。
+
+    ``smart_batching_collate`` 生成的张量永远在 CPU，模型可能在 GPU，直接送入 loss 会报
+    “Expected all tensors to be on the same device ... index is on cpu ... cuda:0”。
+    """
+    import torch
+
+    features = [
+        {k: (v.to(device) if torch.is_tensor(v) else v) for k, v in f.items()}
+        for f in sentence_features
+    ]
+    if torch.is_tensor(labels):
+        labels = labels.to(device)
+    return features, labels
+
+
 def _eval_loss(model, loss_fn, val_examples: list, batch_size: int) -> float | None:
     """真实验证损失：eval 模式对验证集计算 MultipleNegativesRankingLoss 均值。"""
     if not val_examples:
@@ -1540,6 +1557,7 @@ def _eval_loss(model, loss_fn, val_examples: list, batch_size: int) -> float | N
     n = 0
     with torch.no_grad():
         for sentence_features, labels in dataloader:
+            sentence_features, labels = _move_batch_to_model(sentence_features, labels, model.device)
             total += float(loss_fn(sentence_features, labels).item())
             n += 1
     model.train()
@@ -1588,7 +1606,7 @@ def _do_real_train(
     model = SentenceTransformer(base_dir, device=resolve_torch_device())
     model.max_seq_length = passage_max_len
     loss_fn = MultipleNegativesRankingLoss(model)
-    logger.info("真实微调：基础模型加载完成 base_dir=%s", base_dir)
+    logger.info("真实微调：基础模型加载完成 base_dir=%s device=%s", base_dir, model.device)
 
     def _texts(rec: dict) -> list[str]:
         # [query, positive] 基础上追加难负样本，供 MultipleNegativesRankingLoss 显式学习
@@ -1636,6 +1654,7 @@ def _do_real_train(
         logger.info("真实微调 Epoch %d/%d 开始（共 %d 步）", epoch, num_epochs, steps_per_epoch)
         for batch_idx, (sentence_features, labels) in enumerate(train_dataloader, start=1):
             optimizer.zero_grad()
+            sentence_features, labels = _move_batch_to_model(sentence_features, labels, model.device)
             loss = loss_fn(sentence_features, labels)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
