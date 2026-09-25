@@ -83,6 +83,32 @@ export interface MLModelList {
   total: number
 }
 
+export interface MLModelFile {
+  path: string
+  name: string
+  ext: string
+  size: number
+  empty: boolean
+  viewable: boolean
+}
+
+export interface MLModelFileList {
+  dir: string | null
+  file_count: number
+  total_size: number
+  total_size_mb: number
+  files: MLModelFile[]
+}
+
+export interface MLModelFileContent {
+  path: string
+  name: string
+  size: number
+  empty: boolean
+  content: string
+  truncated: boolean
+}
+
 export interface MLTrainMetrics {
   epochs?: number[]
   train_loss?: number[]

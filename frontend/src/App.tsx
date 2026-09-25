@@ -17,6 +17,7 @@ import EvalDetailPage from './pages/ml/EvalDetailPage'
 import EvalDimensionCreatePage from './pages/ml/EvalDimensionCreatePage'
 import EvalListPage from './pages/ml/EvalListPage'
 import LeaderboardDetailPage from './pages/ml/LeaderboardDetailPage'
+import ModelFilesPage from './pages/ml/ModelFilesPage'
 import ModelImportPage from './pages/ml/ModelImportPage'
 import ModelListPage from './pages/ml/ModelListPage'
 import TuneCreatePage from './pages/ml/TuneCreatePage'
@@ -48,6 +49,7 @@ export default function App() {
             <Route path="/ml/datasets/:id" element={<DatasetDetailPage />} />
             <Route path="/ml/models" element={<ModelListPage />} />
             <Route path="/ml/models/import" element={<ModelImportPage />} />
+            <Route path="/ml/models/:id/files" element={<ModelFilesPage />} />
             <Route path="/ml/tune" element={<TuneListPage />} />
             <Route path="/ml/tune/new" element={<TuneCreatePage />} />
             <Route path="/ml/tune/output/:taskId" element={<TuneOutputPage />} />

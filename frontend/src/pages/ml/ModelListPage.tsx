@@ -1,4 +1,4 @@
-import { Box, Check, Copy, Loader2, Plus, RefreshCw, Search, Trash2 } from 'lucide-react'
+import { Box, Check, Copy, Eye, Loader2, Plus, RefreshCw, Search, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { mlApi } from '../../api/ml'
@@ -134,7 +134,7 @@ export default function ModelListPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-100 text-left text-xs text-slate-500">
-              <th className="px-4 py-3 font-medium">模型名称/ID</th>
+              <th className="px-4 py-3 font-medium">模型名称</th>
               <th className="px-4 py-3 font-medium">基础模型</th>
               <th className="px-4 py-3 font-medium">来源</th>
               <th className="px-4 py-3 font-medium">状态</th>
@@ -181,7 +181,6 @@ export default function ModelListPage() {
                             {copiedId === m.id ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
                           </button>
                         </div>
-                        <div className="truncate font-mono text-xs text-slate-400" title={m.id}>{m.id}</div>
                       </div>
                     </div>
                   </td>
@@ -201,6 +200,14 @@ export default function ModelListPage() {
                   <td className="px-4 py-3 text-slate-500">{formatDate(m.created_at)}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/ml/models/${m.id}/files`, { state: { name: m.name } })}
+                        className="flex items-center gap-1 text-xs text-indigo-600 hover:underline"
+                      >
+                        <Eye size={13} />
+                        查看
+                      </button>
                       {!m.is_local && m.source_type !== 'provider' && (
                         <button type="button" onClick={() => handleSaveLocal(m)} disabled={busyId === m.id} className="flex items-center gap-1 text-xs text-blue-600 hover:underline disabled:opacity-60">
                           {busyId === m.id && <Loader2 size={13} className="animate-spin" />}

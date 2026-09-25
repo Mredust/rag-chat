@@ -13,6 +13,8 @@ import type {
   MLLeaderboardDetail,
   MLLeaderboardList,
   MLModel,
+  MLModelFileContent,
+  MLModelFileList,
   MLModelList,
   MLOptions,
   MLTrainTask,
@@ -336,6 +338,9 @@ export const mlApi = {
   saveModelLocal: (id: string) => http.post<MLModel>(`/ml/models/${id}/save-local`),
   deleteModel: (id: string, deleteLocal?: boolean) =>
     http.delete<null>(`/ml/models/${id}${deleteLocal ? '?delete_local=true' : ''}`),
+  listModelFiles: (id: string) => http.get<MLModelFileList>(`/ml/models/${id}/files`),
+  readModelFile: (id: string, path: string) =>
+    http.get<MLModelFileContent>(`/ml/models/${id}/file${qs({ path })}`),
 
   // 训练任务
   listTrainTasks: (params: { priority?: string; base_model?: string; search?: string }) =>

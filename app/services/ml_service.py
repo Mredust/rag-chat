@@ -966,6 +966,98 @@ def serialize_model(model: MLModel) -> dict:
     }
 
 
+# ===== 模型目录文件查看 =====
+
+_VIEWABLE_TEXT_EXTS = {".json", ".md", ".txt"}  # 前端可弹窗预览内容的文件后缀
+_MAX_VIEW_FILE_SIZE = 512 * 1024  # 单个预览文件最多读取 512KB
+
+
+def _model_view_dir(model: MLModel) -> Path | None:
+    """解析模型本地目录：优先 model_dir，其次按名称在 models 各层级查找。"""
+    if model.model_dir:
+        p = _resolve_model_dir(model.model_dir)
+        if p is not None and p.is_dir():
+            return p
+    for raw in (model.name, model.base_model):
+        name = (raw or "").replace("\\", "/").strip("/")
+        if not name:
+            continue
+        for cand in (MODELS_DIR / name, MODELS_SYSTEM_DIR / name, MODELS_FTM_DIR / name):
+            if cand.is_dir():
+                return cand
+    return None
+
+
+def list_model_files(model: MLModel) -> dict:
+    """列出模型目录下的全部文件（递归），含单文件大小与总大小，供「查看」页面展示。"""
+    root = _model_view_dir(model)
+    if root is None:
+        return {"dir": None, "file_count": 0, "total_size": 0, "total_size_mb": 0.0, "files": []}
+
+    files: list[dict] = []
+    total = 0
+    for p in sorted(root.rglob("*")):
+        if not p.is_file():
+            continue
+        try:
+            size = p.stat().st_size
+        except OSError:
+            continue
+        total += size
+        ext = p.suffix.lower()
+        files.append(
+            {
+                "path": p.relative_to(root).as_posix(),
+                "name": p.name,
+                "ext": ext.lstrip("."),
+                "size": size,
+                "empty": size == 0,
+                "viewable": ext in _VIEWABLE_TEXT_EXTS,
+            }
+        )
+    return {
+        "dir": str(root),
+        "file_count": len(files),
+        "total_size": total,
+        "total_size_mb": round(total / 1024 / 1024, 2),
+        "files": files,
+    }
+
+
+def read_model_file(model: MLModel, rel_path: str) -> dict:
+    """读取模型目录下 json/md/txt 文件内容（做路径穿越校验并限制读取大小）。"""
+    root = _model_view_dir(model)
+    if root is None:
+        raise BusinessError(ErrorCode.INVALID_PARAMETER, message="该模型没有本地文件目录", http_status=404)
+
+    target = (root / rel_path).resolve()
+    try:
+        target.relative_to(root.resolve())
+    except ValueError:
+        raise BusinessError(ErrorCode.INVALID_PARAMETER, message="非法文件路径", http_status=400) from None
+    if not target.is_file():
+        raise BusinessError(ErrorCode.INVALID_PARAMETER, message=f"文件不存在: {rel_path}", http_status=404)
+    if target.suffix.lower() not in _VIEWABLE_TEXT_EXTS:
+        raise BusinessError(
+            ErrorCode.INVALID_PARAMETER, message="仅支持查看 .json / .md / .txt 文件", http_status=400
+        )
+
+    size = target.stat().st_size
+    base = {"path": rel_path, "name": target.name, "size": size, "empty": size == 0}
+    if size == 0:
+        return {**base, "content": "", "truncated": False}
+
+    raw = target.read_bytes()[:_MAX_VIEW_FILE_SIZE]
+    truncated = size > _MAX_VIEW_FILE_SIZE
+    content = raw.decode("utf-8", errors="replace")
+    if target.suffix.lower() == ".json" and not truncated:
+        try:
+            content = json.dumps(json.loads(content), ensure_ascii=False, indent=2)
+        except (ValueError, TypeError):
+            pass
+    return {**base, "content": content, "truncated": truncated}
+
+
 async def import_provider_model(db: AsyncSession, name: str, provider: str, url: str, api_key: str, model_name: str) -> MLModel:
     """导入供应商向量模型：保存远程供应商配置，后续评测/调优使用该供应商的向量模型而非本地模型。"""
     if "/" in name or "\\" in name or ".." in name:

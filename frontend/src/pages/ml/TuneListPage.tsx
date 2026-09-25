@@ -184,7 +184,7 @@ export default function TuneListPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-100 text-left text-xs text-slate-500">
-              <th className="px-4 py-3 font-medium">任务名称/ID</th>
+              <th className="px-4 py-3 font-medium">任务名称</th>
               <th className="px-4 py-3 font-medium">基础模型</th>
               <th className="px-4 py-3 font-medium">训练方法</th>
               <th className="px-4 py-3 font-medium">训练状态</th>
@@ -215,7 +215,6 @@ export default function TuneListPage() {
                     <button type="button" onClick={() => navigate(`/ml/tune/output/${t.id}`)} className="cursor-pointer text-left font-medium text-blue-600 hover:text-blue-700">
                       {t.name}
                     </button>
-                    <div className="font-mono text-xs text-slate-400" title={t.id}>{t.id}</div>
                   </td>
                   <td className="px-4 py-3 font-mono text-xs text-slate-600" title={t.base_model}>{t.base_model}</td>
                   <td className="px-4 py-3 text-slate-600">{trainMethodFull(t.train_method, t.config)}</td>

@@ -411,6 +411,27 @@ async def save_model_local(
     )
 
 
+@router.get("/models/{model_id}/files", summary="查看模型目录文件列表（含大小/总大小）")
+async def model_files(
+    model_id: str,
+    _: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    model = await _get_model_or_404(db, model_id)
+    return success_response(data=ml_service.list_model_files(model))
+
+
+@router.get("/models/{model_id}/file", summary="查看模型目录下文本文件内容（json/md/txt）")
+async def model_file(
+    model_id: str,
+    path: str = Query(..., min_length=1, max_length=512, description="模型目录内的相对路径"),
+    _: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    model = await _get_model_or_404(db, model_id)
+    return success_response(data=ml_service.read_model_file(model, path))
+
+
 # ===== 模型调优 =====
 
 
