@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import csv
 import difflib
+import gc
 import io
 import json
 import logging
@@ -32,6 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.ai import EmbeddingClient, build_embedder, build_llm
+from app.ai.embedding import clear_local_model_cache, ensure_hf_model_config
 from app.ai.llm import LLMError
 from app.core.config import BASE_DIR, resolve_torch_device
 from app.core.response import BusinessError, ErrorCode
@@ -1089,6 +1091,26 @@ async def import_provider_model(db: AsyncSession, name: str, provider: str, url:
 # ======================================================================
 
 _STOP_FLAGS: set[str] = set()
+# 同一时刻只允许一个微调任务占用显存：并发训练会叠加显存占用导致 CUDA OOM
+_TRAIN_LOCK = asyncio.Lock()
+
+
+def _release_torch_memory(note: str = "") -> None:
+    """回收训练占用的显存/内存：触发 GC 并清空 PyTorch 缓存分配器。
+
+    PyTorch 释放的显存默认留在进程缓存里不还给驱动，任务结束后显式清空，
+    才能保证下一次微调/评测拿到完整显存。
+    """
+    gc.collect()
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:  # noqa: BLE001 - 内存回收失败不应影响任务收尾
+        pass
+    if note:
+        logger.info("显存/内存已释放：%s", note)
 
 
 async def create_train_task(db: AsyncSession, data) -> MLTrainTask:
@@ -1335,7 +1357,8 @@ def _build_export_zip(dest: Path, task: MLTrainTask, base_dir: Path | None, prog
             )
         else:
             # 基础模型目录不存在时写入占位，保证导出始终有内容
-            zf.writestr(prefix + "config.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+            # 用 train_manifest.json 而非 config.json：后者是模型结构配置，不能被任务元数据占用
+            zf.writestr(prefix + "train_manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
     return filename
 
 
@@ -1695,6 +1718,8 @@ def _do_real_train(
     if not train_pairs:
         raise RuntimeError("训练数据集中暂无有效三元组（query/positive 为空）")
 
+    # 加载前修复可能被任务元数据覆盖的模型结构配置（如以微调产物为基础继续训练）
+    ensure_hf_model_config(Path(base_dir))
     model = SentenceTransformer(base_dir, device=resolve_torch_device())
     model.max_seq_length = passage_max_len
     loss_fn = MultipleNegativesRankingLoss(model)
@@ -1744,7 +1769,7 @@ def _do_real_train(
         epoch_start = time.time()
         logger.info("真实微调 Epoch %d/%d 开始（共 %d 步）", epoch, num_epochs, steps_per_epoch)
         for batch_idx, (sentence_features, labels) in enumerate(train_dataloader, start=1):
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
             sentence_features, labels = _move_batch_to_model(sentence_features, labels, model.device)
             loss = loss_fn(sentence_features, labels)
             loss.backward()
@@ -1796,6 +1821,16 @@ def _do_real_train(
     os.makedirs(output_dir, exist_ok=True)
     model.save(str(output_dir))
     logger.info("真实微调：模型已保存 output_dir=%s", output_dir)
+
+    # 微调结束立即释放训练资源：丢弃模型/优化器/数据加载器引用并清空显存缓存，
+    # 避免上一次训练的显存占用叠加到下一次任务
+    del loss_fn, optimizer, scheduler, train_dataloader, model
+    gc.collect()
+    try:
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:  # noqa: BLE001 - 资源回收失败不应影响训练结果
+        pass
 
     return {
         "epochs": epochs,
@@ -1959,22 +1994,30 @@ async def _run_train_task(task_id: str) -> None:
                     f"未找到基础模型目录: {task.base_model}（请确认已导入到「我的模型」或 models 目录）"
                 )
 
-            result = await asyncio.to_thread(
-                _do_real_train,
-                base_dir=str(base_dir),
-                train_records=train_records,
-                val_records=val_records,
-                num_epochs=num_epochs,
-                batch_size=batch_size,
-                lr=lr_value,
-                warmup_ratio=warmup_ratio,
-                weight_decay=weight_decay,
-                query_max_len=query_max_len,
-                passage_max_len=passage_max_len,
-                output_dir=output_dir,
-                progress_cb=_progress_cb,
-                step_cb=_step_cb,
-            )
+            # 训练前释放缓存的本地向量模型与显存碎片，为微调腾出完整显存
+            clear_local_model_cache()
+            _release_torch_memory()
+            if _TRAIN_LOCK.locked():
+                lines.append("[CONFIG] 已有其他微调任务占用 GPU，等待其释放显存后开始…")
+                task.log = "\n".join(lines)
+                await db.commit()
+            async with _TRAIN_LOCK:
+                result = await asyncio.to_thread(
+                    _do_real_train,
+                    base_dir=str(base_dir),
+                    train_records=train_records,
+                    val_records=val_records,
+                    num_epochs=num_epochs,
+                    batch_size=batch_size,
+                    lr=lr_value,
+                    warmup_ratio=warmup_ratio,
+                    weight_decay=weight_decay,
+                    query_max_len=query_max_len,
+                    passage_max_len=passage_max_len,
+                    output_dir=output_dir,
+                    progress_cb=_progress_cb,
+                    step_cb=_step_cb,
+                )
 
             epochs = result["epochs"]
             train_losses = result["train_losses"]
@@ -2000,10 +2043,9 @@ async def _run_train_task(task_id: str) -> None:
             task.output_model_name = _train_output_name(task)
             output_dir.mkdir(parents=True, exist_ok=True)
             task.output_dir = to_rel_path(output_dir)
-            (output_dir / "config.json").write_text(
-                json.dumps(_build_output_model_config(task), ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
+            # 注意：不要写 output_dir/config.json —— 那是 SentenceTransformer 保存的模型结构配置
+            # （hidden_size/层数/词表），被任务元数据覆盖后加载会按默认结构建模、权重形状不匹配。
+            # 训练元数据统一放 train_manifest.json。
             # 标记产出目录已完成（含真实微调权重），避免「保存到我的模型」时用基础模型覆盖
             (output_dir / "train_manifest.json").write_text(
                 json.dumps(_build_output_model_config(task), ensure_ascii=False, indent=2),
@@ -2029,13 +2071,19 @@ async def _run_train_task(task_id: str) -> None:
         except Exception as exc:  # noqa: BLE001
             logger.exception("训练任务失败: %s", exc)
             task.status = "failed"
-            task.log = "\n".join(lines + [f"[ERROR] {exc}"])
+            err_text = str(exc)
+            # 显存不足给可操作的建议，避免用户只看到 CUDA error 不知如何处理
+            if "out of memory" in err_text.lower():
+                err_text += "（显存不足：建议调小「批次大小」或「passage_max_len」，或关闭其他占用 GPU 的任务后重试）"
+            task.log = "\n".join(lines + [f"[ERROR] {err_text}"])
             # 回滚本次失败运行新建的产出目录（训练前已存在的同名模型不受影响）
             if not output_dir_existed and output_dir.exists():
                 shutil.rmtree(output_dir, ignore_errors=True)
                 logger.info("训练任务失败，已清理未完成的产出目录: %s", output_dir)
         finally:
             _STOP_FLAGS.discard(task.id)
+            # 无论成功/失败/停止，微调结束后都回收显存，避免残留占用影响后续任务
+            _release_torch_memory(f"训练任务 {task.id} 结束")
             await db.commit()
 
 
@@ -3091,6 +3139,8 @@ async def _run_eval_task(task_id: str) -> None:
             task.status = "failed"
         finally:
             _EVAL_STOP_FLAGS.discard(task.id)
+            # 评测结束（含失败/停止）回收显存，避免交叉编码器等临时模型残留占用
+            _release_torch_memory(f"评测任务 {task.id} 结束")
             await db.commit()
 
 

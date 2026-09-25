@@ -11,9 +11,12 @@
 """
 from __future__ import annotations
 
+import gc
 import hashlib
+import json
 import logging
 import math
+import shutil
 import threading
 from pathlib import Path
 from typing import Iterable
@@ -48,6 +51,78 @@ def _resolve_local_model_path(model_name: str) -> Path | None:
     return None
 
 
+# HuggingFace 模型结构配置的必要字段（用于区分模型配置与训练任务元数据）
+_HF_CONFIG_KEYS = ("hidden_size", "num_hidden_layers", "vocab_size")
+
+
+def _is_hf_config(data: object) -> bool:
+    return isinstance(data, dict) and all(key in data for key in _HF_CONFIG_KEYS)
+
+
+def ensure_hf_model_config(model_path: Path) -> None:
+    """修复被训练任务元数据覆盖的 HuggingFace ``config.json``（微调产物目录）。
+
+    训练任务曾把任务配置写进 ``config.json``，覆盖 SentenceTransformer 保存的模型结构配置，
+    加载时会按 BERT-base 默认结构（768/12 层）建模，与微调权重形状不匹配而报
+    ``ignore_mismatched_sizes`` 错误。检测到非模型结构配置时，先备份为
+    ``train_task_config.json``，再按任务元数据里的基础模型恢复结构配置。
+    """
+    cfg_path = model_path / "config.json"
+    data = None
+    if cfg_path.is_file():
+        try:
+            data = json.loads(cfg_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, UnicodeDecodeError):
+            data = None
+        if _is_hf_config(data):
+            return
+        # 不是模型结构配置（训练任务元数据）：备份后重建
+        backup = model_path / "train_task_config.json"
+        try:
+            shutil.copyfile(cfg_path, backup)
+            cfg_path.unlink()
+            logger.info("发现非模型结构的 config.json，已备份为 %s", backup)
+        except OSError:
+            pass
+
+    # 从任务元数据（或备份）里取基础模型名，恢复基础模型的结构配置
+    base_name = ""
+    if isinstance(data, dict):
+        base_name = str(data.get("base_model") or "")
+    if not base_name:
+        try:
+            manifest = json.loads((model_path / "train_manifest.json").read_text(encoding="utf-8"))
+            base_name = str(manifest.get("base_model") or "")
+        except (OSError, ValueError, UnicodeDecodeError):
+            base_name = ""
+
+    if base_name:
+        name = base_name.replace("\\", "/").strip("/")
+        models_base = BASE_DIR / "models"
+        for cand in (models_base / name, models_base / "system" / name, models_base / "ftm" / name):
+            src = cand / "config.json"
+            if not src.is_file() or src.resolve() == cfg_path.resolve():
+                continue
+            try:
+                src_data = json.loads(src.read_text(encoding="utf-8"))
+            except (OSError, ValueError, UnicodeDecodeError):
+                continue
+            if not _is_hf_config(src_data):
+                continue
+            try:
+                shutil.copyfile(src, cfg_path)
+                logger.info("已从基础模型 %s 恢复模型结构配置 config.json: %s", cand.name, model_path)
+                return
+            except OSError as exc:
+                logger.warning("恢复 config.json 失败: %s (%s)", cfg_path, exc)
+                return
+
+    logger.warning(
+        "模型目录 %s 缺少有效的 config.json，且未找到可用的基础模型配置，加载可能失败",
+        model_path,
+    )
+
+
 def _load_local_model(model_path: Path):
     """加载并缓存本地 sentence-transformers 模型（线程安全，仅加载一次）。"""
     key = str(model_path)
@@ -65,6 +140,8 @@ def _load_local_model(model_path: Path):
         from sentence_transformers import SentenceTransformer
 
         torch.set_num_threads(_CPU_THREADS)
+        # 加载前修复可能被训练任务元数据覆盖的模型结构配置
+        ensure_hf_model_config(model_path)
         logger.info("本地向量模型加载中: %s", model_path)
         model = SentenceTransformer(key, device=resolve_torch_device())
         _local_model_cache[key] = model
@@ -72,6 +149,24 @@ def _load_local_model(model_path: Path):
     dim = model.get_embedding_dimension()
     logger.info("本地向量模型就绪: %s (dim=%d)", model_path, dim)
     return model
+
+
+def clear_local_model_cache() -> int:
+    """释放进程内缓存的本地向量模型（返回释放数量），微调等大显存任务前调用。
+
+    缓存的模型常驻显存，微调前清掉可腾出空间；下次向量化请求会自动重新加载。
+    """
+    import torch
+
+    with _local_model_lock:
+        count = len(_local_model_cache)
+        _local_model_cache.clear()
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    if count:
+        logger.info("已释放 %d 个本地向量模型缓存（显存/内存已回收）", count)
+    return count
 
 
 class EmbeddingClient:
