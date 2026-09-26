@@ -257,6 +257,13 @@ export interface EvalTrace {
   reason?: string
   /** 维度名 -> 该维度裁判回答/用量/结论 */
   llm_details?: Record<string, EvalTraceLlmDetail>
+  /** 各检索策略的 Top 文档列表（供策略维度核对正样本是否在 Top-K 内） */
+  strategy_top?: {
+    vector?: EvalTraceDoc[]
+    fulltext?: EvalTraceDoc[]
+    hybrid?: EvalTraceDoc[]
+    rerank?: EvalTraceDoc[]
+  }
 }
 
 export interface MLEvalTaskDetailItem {

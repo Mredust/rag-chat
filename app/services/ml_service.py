@@ -2475,6 +2475,7 @@ def _compute_real_ranks(
         "rerank": None,
         "vector_score": None,
         "vector_top5": [],
+        "strategy_top": {},
     }
     if not records or not candidates:
         return [dict(empty) for _ in records]
@@ -2490,6 +2491,18 @@ def _compute_real_ranks(
     n = len(candidates)
     rrf_k = 60
     m = min(n, max(rerank_top_k or top_k, 1) * 3)
+    # 各策略 Top 文档存储条数：满足策略准确率维度最大的 Top-K 即可（用于明细弹窗核对是否在 Top-K 内）
+    strat_k = min(max(rerank_top_k or top_k, 1), _MAX_STORED_TOP_DOCS)
+
+    def order_docs(order: np.ndarray, scores: np.ndarray, k: int) -> list[dict]:
+        return [
+            {
+                "rank": pos + 1,
+                "content": candidates[int(ci)],
+                "score": round(float(scores[int(ci)]), 4),
+            }
+            for pos, ci in enumerate(order[:k])
+        ]
 
     results: list[dict] = []
     for i, rec in enumerate(records):
@@ -2546,14 +2559,21 @@ def _compute_real_ranks(
                 rerank_rank = pos + 1
                 break
 
-        vector_top5 = [
-            {
-                "rank": pos + 1,
-                "content": candidates[int(ci)],
-                "score": round(float(vec_scores[int(ci)]), 4),
-            }
-            for pos, ci in enumerate(vec_order[:top_k])
-        ]
+        vector_top5 = order_docs(vec_order, vec_scores, top_k)
+        # 各检索策略的 Top 文档列表：明细弹窗按选中维度展示，供用户核对正样本是否在 Top-K 内
+        strategy_top = {
+            "vector": order_docs(vec_order, vec_scores, strat_k),
+            "fulltext": order_docs(ft_order, lex_scores, strat_k),
+            "hybrid": order_docs(hy_order, rrf, strat_k),
+            "rerank": [
+                {
+                    "rank": pos + 1,
+                    "content": str(c.get("content") or ""),
+                    "score": round(float(c.get("score") or 0.0), 4),
+                }
+                for pos, c in enumerate(ranked[:strat_k])
+            ],
+        }
 
         results.append({
             "vector": rank_of(vec_order),
@@ -2562,14 +2582,16 @@ def _compute_real_ranks(
             "rerank": rerank_rank,
             "vector_score": round(float(vec_scores[idx]), 4),
             "vector_top5": vector_top5,
+            "strategy_top": strategy_top,
         })
     return results
 
 
-def _build_real_llm_trace(positive: str, llm_infos: list[dict], overall_pos: bool) -> dict:
+def _build_real_llm_trace(rag_answer: str, llm_infos: list[dict], overall_pos: bool) -> dict:
     """由真实裁判 LLM 输出汇总单样本的大模型评估 trace（结论/回答/各维度/用量等）。
 
-    llm_details 按维度名保存该维度的裁判原文/用量/结论，供明细弹窗按维度切换查看。
+    rag_answer 为被测模型的真实生成回答（非参考答案）；llm_details 按维度名保存该维度的
+    裁判原文/用量/结论，供明细弹窗按维度切换查看。
     """
     tokens = {"input": 0, "output": 0, "total": 0}
     checks: list[dict] = []
@@ -2614,7 +2636,7 @@ def _build_real_llm_trace(positive: str, llm_infos: list[dict], overall_pos: boo
             if content:
                 reasons.append(content)
     return {
-        "rag_answer": positive,
+        "rag_answer": rag_answer,
         "judge_model": judge_model,
         "tokens": tokens,
         "conclusion": "Pass" if overall_pos else "Fail",
@@ -2719,8 +2741,12 @@ async def _load_eval_task_records(db: AsyncSession, task: MLEvalTask) -> list[di
     return await _load_eval_records(db, task.data_id)
 
 
-def _render_variables(template: str, rec: dict | None) -> str:
-    """将评测 Prompt/字段模板中的 ${query}/${positive}/${negative} 替换为测试集内容。"""
+def _render_variables(template: str, rec: dict | None, output: str = "") -> str:
+    """将评测 Prompt/字段模板中的 ${query}/${positive}/${negative}/${output} 替换为测试集内容与模型回答。
+
+    ${output} 为被测模型的生成回答（大模型评测）或参考答案（向量模型评测无生成能力），
+    未替换会让裁判模型直接评判占位符文本，导致评测结论失真。
+    """
     if not template:
         return ""
     rec = rec or {}
@@ -2728,7 +2754,42 @@ def _render_variables(template: str, rec: dict | None) -> str:
         template.replace("${query}", str(rec.get("query", "")))
         .replace("${positive}", str(rec.get("positive", "")))
         .replace("${negative}", str(rec.get("negative", "")))
+        .replace("${output}", output or "")
     )
+
+
+async def _build_tested_llm(db: AsyncSession, llm_model_id: str | None):
+    """构建被测大模型客户端：大模型评测任务用它生成每条样本的真实回答（裁判 Prompt 的 ${output}）。"""
+    if not llm_model_id:
+        return None
+    from app.models.provider import Provider
+
+    prov = await db.get(Provider, llm_model_id)
+    if prov is None:
+        logger.warning("被测大模型供应商不存在: %s", llm_model_id)
+        return None
+    names = list(prov.model_names or []) or ([prov.model_name] if prov.model_name else [])
+    return build_llm({
+        "llm_api_base": prov.api_base,
+        "llm_api_key": config_service.decrypt(prov.api_key),
+        "llm_model": prov.model_name,
+        "llm_models": ",".join(names),
+    })
+
+
+async def _generate_model_output(llm, query: str, sem: asyncio.Semaphore) -> str:
+    """用被测大模型对 query 生成回答，作为裁判 Prompt 的 ${output}；失败时返回空串（裁判判为未作答）。"""
+    if llm is None:
+        return ""
+    async with sem:
+        try:
+            resp = await llm.complete(
+                [{"role": "user", "content": query}], temperature=0.0, max_tokens=2048
+            )
+            return str(resp.get("content") or "").strip()
+        except Exception as exc:  # noqa: BLE001 - 生成失败不阻断评测，交给裁判按未作答评定
+            logger.warning("被测大模型生成回答失败: %s", exc)
+            return ""
 
 
 async def _build_judge_llm(db: AsyncSession, eval_config: dict):
@@ -2966,14 +3027,17 @@ async def _judge_numeric(client, prompt: str, sem: asyncio.Semaphore) -> dict:
             return out
 
 
-async def _eval_dim_realtime(dim, rec, rank_map, judge_clients, sem):
-    """对单条测试数据按维度真实打分，返回 (维度结果, 大模型评估信息或 None)。"""
+async def _eval_dim_realtime(dim, rec, rank_map, judge_clients, sem, output_text: str = ""):
+    """对单条测试数据按维度真实打分，返回 (维度结果, 大模型评估信息或 None)。
+
+    output_text 为被测模型回答（替换裁判 Prompt 的 ${output}）。
+    """
     et = dim.get("eval_type", "llm_classify")
     cfg = dim.get("eval_config") or {}
     if et in ("retrieval", "spearman"):
         return _dim_result(dim, rank_map, {}, rec), None
     if et == "llm_classify":
-        prompt = _render_variables(cfg.get("prompt", ""), rec)
+        prompt = _render_variables(cfg.get("prompt", ""), rec, output_text)
         raw = await _judge_classify(judge_clients.get(dim["name"]), prompt, cfg, sem)
         info = {
             "name": dim["name"],
@@ -2985,7 +3049,7 @@ async def _eval_dim_realtime(dim, rec, rank_map, judge_clients, sem):
         }
         return {"label": raw.get("label", "Pass")}, info
     if et == "llm_numeric":
-        prompt = _render_variables(cfg.get("prompt", ""), rec)
+        prompt = _render_variables(cfg.get("prompt", ""), rec, output_text)
         raw = await _judge_numeric(judge_clients.get(dim["name"]), prompt, sem)
         info = {
             "name": dim["name"],
@@ -3050,6 +3114,8 @@ async def _run_eval_task(task_id: str) -> None:
             pass_count = 0
             is_llm_eval = task.model_type == "llm"
             has_llm_dims = any(m["eval_type"] in ("llm_classify", "llm_numeric") for m in dim_metas)
+            # 被测大模型：为每条样本生成真实回答，作为裁判 Prompt 的 ${output}（缺失会让裁判评判占位符）
+            tested_llm = await _build_tested_llm(db, task.llm_model_id) if (is_llm_eval and has_llm_dims) else None
 
             # 识别向量模型来源：供应商模型（source=provider）评测评的是远程供应商向量模型
             eval_model_source: str | None = None
@@ -3089,6 +3155,7 @@ async def _run_eval_task(task_id: str) -> None:
                     vector_rank = fulltext_rank = hybrid_rank = rerank_rank = None
                     vector_score = None
                     vector_top5: list[dict] = []
+                    strategy_top: dict[str, list[dict]] = {}
                 else:
                     rr = real_ranks[i] if real_ranks and i < len(real_ranks) else {}
                     vector_rank = rr.get("vector")
@@ -3097,6 +3164,7 @@ async def _run_eval_task(task_id: str) -> None:
                     rerank_rank = rr.get("rerank")
                     vector_score = rr.get("vector_score")
                     vector_top5 = rr.get("vector_top5") or []
+                    strategy_top = rr.get("strategy_top") or {}
                 rank_map = {
                     "recall_at_5": vector_rank,
                     "mrr": vector_rank,
@@ -3109,8 +3177,15 @@ async def _run_eval_task(task_id: str) -> None:
 
                 dims: dict = {}
                 llm_infos: list[dict] = []
+                # 裁判 Prompt 的 ${output}：大模型评测取被测模型真实生成回答；向量模型评测无生成能力，取参考答案
+                if is_llm_eval:
+                    output_text = await _generate_model_output(tested_llm, query, sem) if has_llm_dims else ""
+                else:
+                    output_text = positive
                 for m in dim_metas:
-                    res, llm_info = await _eval_dim_realtime(m, rec, rank_map, judge_clients, sem)
+                    res, llm_info = await _eval_dim_realtime(
+                        m, rec, rank_map, judge_clients, sem, output_text,
+                    )
                     dims[m["name"]] = res
                     dim_results[m["name"]].append(res)
                     if llm_info is not None:
@@ -3135,10 +3210,11 @@ async def _run_eval_task(task_id: str) -> None:
                     "hybrid_rank": hybrid_rank,
                     "rerank_rank": rerank_rank,
                     "vector_top5": vector_top5,
+                    "strategy_top": strategy_top,
                     "judge": dims,
                 }
                 if has_llm_dims:
-                    trace.update(_build_real_llm_trace(positive, llm_infos, overall_pos))
+                    trace.update(_build_real_llm_trace(output_text, llm_infos, overall_pos))
 
                 details.append({
                     "index": i + 1,
