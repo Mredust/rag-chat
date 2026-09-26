@@ -1,12 +1,14 @@
 import { ArrowLeft, ChevronRight, Download, Loader2, RotateCcw, Search, X } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
 import { useNavigate, useParams } from 'react-router-dom'
+import remarkGfm from 'remark-gfm'
 import type { EChartsOption } from 'echarts'
 import { mlApi } from '../../api/ml'
 import EChart from '../../components/EChart'
 import Select from '../../components/Select'
 import { formatDate } from '../../lib/format'
-import type { MLEvalTask, MLEvalTaskDetailItem } from '../../types/ml'
+import type { EvalTraceDoc, MLEvalTask, MLEvalTaskDetailItem } from '../../types/ml'
 import { badgeCls, badgeLabel } from './constants'
 
 type DetailTab = 'detail' | 'metrics'
@@ -21,6 +23,17 @@ function truncateText(s: string, max = 8): string {
 /* 排名展示：null 视为未命中 */
 function rankText(r: number | null): string {
   return r == null ? '未命中' : `第 ${r} 位`
+}
+
+/** 裁判/模型回答的 Markdown 渲染：分步推理、列表、标点等原样排版，避免挤成一行 */
+function MarkdownText({ text, placeholder = '—' }: { text?: string; placeholder?: string }) {
+  const value = (text ?? '').trim()
+  if (!value) return <span className="text-slate-400">{placeholder}</span>
+  return (
+    <div className="markdown-body text-sm">
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>
+    </div>
+  )
 }
 
 /** 评测过程详情弹窗：顶部下拉切换测评维度，下方展示基本信息与该维度结果 */
@@ -69,6 +82,20 @@ function TraceModal({ item, metrics, onClose }: {
   const visibleStrategies = sel && showStrategy
     ? strategies.filter((s) => s.name === strategyOf[sel.metric ?? ''])
     : strategies
+
+  // 选中策略维度对应的 Top 文档列表：供用户核对正样本是否真的在 Top-K 内
+  const strategyKeyMap: Record<string, 'vector' | 'fulltext' | 'hybrid' | 'rerank'> = {
+    vector_qa_accuracy: 'vector',
+    fulltext_qa_accuracy: 'fulltext',
+    hybrid_qa_accuracy: 'hybrid',
+    rerank_qa_accuracy: 'rerank',
+  }
+  const strategyKey = sel ? strategyKeyMap[sel.metric ?? ''] : undefined
+  const strategyDocs: EvalTraceDoc[] = strategyKey
+    ? ((strategyKey === 'vector'
+      ? trace.strategy_top?.vector ?? trace.vector_top5
+      : trace.strategy_top?.[strategyKey]) ?? [])
+    : []
 
   // 大模型评估：选中维度时展示该维度的裁判回答/用量/结论
   const llmDetail = sel && showLlm ? trace.llm_details?.[sel.name] : undefined
@@ -183,6 +210,34 @@ function TraceModal({ item, metrics, onClose }: {
                   </tbody>
                 </table>
               </div>
+              {strategyDocs.length > 0 && (
+                <div className="mt-3">
+                  <p className="mb-1 text-xs font-medium text-slate-500">
+                    检索结果 Top-{Math.min(topDocs, strategyDocs.length)}（正样本已标记，便于核对是否在 Top-K 内）
+                  </p>
+                  <div className="overflow-hidden rounded-lg border border-slate-200">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 text-left text-xs text-slate-500">
+                        <tr><th className="px-3 py-2 font-medium">排名</th><th className="px-3 py-2 font-medium">文档内容</th><th className="px-3 py-2 font-medium">分数</th></tr>
+                      </thead>
+                      <tbody>
+                        {strategyDocs.slice(0, topDocs).map((d) => {
+                          const isPositive = d.content === item.positive
+                          return (
+                            <tr key={d.rank} className={`border-t border-slate-100 ${isPositive ? 'bg-green-50' : ''}`}>
+                              <td className="px-3 py-2 text-slate-500">{d.rank}</td>
+                              <td className={`px-3 py-2 whitespace-pre-wrap break-words ${isPositive ? 'font-medium text-green-700' : 'text-slate-700'}`}>
+                                {d.content}{isPositive ? '　✅ 正样本' : ''}
+                              </td>
+                              <td className="px-3 py-2 text-slate-600">{d.score.toFixed(4)}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </section>
           )}
 
@@ -218,7 +273,9 @@ function TraceModal({ item, metrics, onClose }: {
               <h4 className="mb-2 text-sm font-medium text-slate-700">大模型评估{sel ? ` · ${sel.name}` : ''}</h4>
               <div className="rounded-lg border border-slate-200 p-3 text-sm">
                 <p className="text-slate-500">RAG 生成回答：</p>
-                <p className="mt-1 text-slate-700">{trace.rag_answer ?? item.positive}</p>
+                <div className="mt-1">
+                  <MarkdownText text={trace.rag_answer ?? item.positive} />
+                </div>
                 <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-500">
                   <span>裁判模型：{judgeModel || '—'}</span>
                   <span>Token 消耗：{tokens?.total ?? 0}（输入 {tokens?.input ?? 0}，输出 {tokens?.output ?? 0}）</span>
@@ -226,14 +283,18 @@ function TraceModal({ item, metrics, onClose }: {
                 {/* 裁判大模型的具体回答：用于核对维度评分是否合理 */}
                 <div className="mt-3">
                   <p className="text-slate-500">大模型回答：</p>
-                  <p className="mt-1 whitespace-pre-wrap break-words text-slate-700">{llmAnswer || '—'}</p>
+                  <div className="mt-1">
+                    <MarkdownText text={llmAnswer} />
+                  </div>
                 </div>
                 <div className="mt-3 space-y-1.5">
                   {visibleChecks.map((c) => (
-                    <p key={c.name} className="flex items-start gap-2">
+                    <div key={c.name} className="flex items-start gap-2">
                       <span className={c.pass ? 'text-green-600' : 'text-red-600'}>{c.pass ? '✅ 通过' : '❌ 未通过'}</span>
-                      <span className="text-slate-700">{c.name}：{c.reason}</span>
-                    </p>
+                      <div className="flex-1 text-slate-700">
+                        <MarkdownText text={`${c.name}：${c.reason}`} />
+                      </div>
+                    </div>
                   ))}
                 </div>
                 <div className="mt-3 rounded-lg bg-slate-50 p-2.5">
@@ -244,7 +305,10 @@ function TraceModal({ item, metrics, onClose }: {
                       : <span className="text-slate-400">—</span>}
                     　幻觉率：{hallucination ?? '—'} 分
                   </p>
-                  <p className="mt-1 text-slate-500">评测原因：{llmAnswer || trace.reason || '—'}</p>
+                  <div className="mt-1">
+                    <p className="text-xs text-slate-500">评测原因：</p>
+                    <MarkdownText text={llmAnswer || trace.reason} />
+                  </div>
                 </div>
               </div>
             </section>
