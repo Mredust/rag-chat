@@ -2792,6 +2792,34 @@ async def _generate_model_output(llm, query: str, sem: asyncio.Semaphore) -> str
             return ""
 
 
+async def _generate_rag_output(llm, query: str, top_docs: list[dict], sem: asyncio.Semaphore) -> str:
+    """任务一 RAG 生成：将 query + 向量模型检索到的 Top-5 文档片段拼接为上下文交由大模型生成 RAG 答案。
+
+    对应测评流程「RAG 检索与生成」步骤：检索已在 _compute_real_ranks 完成（vector_top5），
+    此处只负责拼接上下文并调用生成模型；失败返回空串，交给裁判按未作答评定。
+    """
+    if llm is None:
+        return ""
+    context = "\n\n".join(
+        f"【片段{d.get('rank') or i}】{d.get('content', '')}"
+        for i, d in enumerate(top_docs or [], 1)
+    ) or "（未检索到相关片段）"
+    prompt = (
+        "请仅根据以下参考资料回答用户问题，答案需完整、准确、简洁；"
+        "参考资料不足以回答时请明确说明。\n\n"
+        f"参考资料：\n{context}\n\n用户问题：{query}"
+    )
+    async with sem:
+        try:
+            resp = await llm.complete(
+                [{"role": "user", "content": prompt}], temperature=0.0, max_tokens=2048
+            )
+            return str(resp.get("content") or "").strip()
+        except Exception as exc:  # noqa: BLE001 - 生成失败不阻断评测，交给裁判按未作答评定
+            logger.warning("RAG 生成回答失败: %s", exc)
+            return ""
+
+
 async def _build_judge_llm(db: AsyncSession, eval_config: dict):
     """根据维度配置的裁判模型构建 LLM 客户端；未指定时回退内置激活供应商。"""
     judge_model = (eval_config or {}).get("judge_model")
@@ -3116,6 +3144,12 @@ async def _run_eval_task(task_id: str) -> None:
             has_llm_dims = any(m["eval_type"] in ("llm_classify", "llm_numeric") for m in dim_metas)
             # 被测大模型：为每条样本生成真实回答，作为裁判 Prompt 的 ${output}（缺失会让裁判评判占位符）
             tested_llm = await _build_tested_llm(db, task.llm_model_id) if (is_llm_eval and has_llm_dims) else None
+            # RAG 生成模型（向量模型测评的任务一）：优先任务指定的生成模型，否则回退运行时默认供应商
+            rag_gen_llm = (
+                await _build_judge_llm(db, {"judge_model": task.llm_model_id or ""})
+                if (has_llm_dims and not is_llm_eval)
+                else None
+            )
 
             # 识别向量模型来源：供应商模型（source=provider）评测评的是远程供应商向量模型
             eval_model_source: str | None = None
@@ -3177,9 +3211,11 @@ async def _run_eval_task(task_id: str) -> None:
 
                 dims: dict = {}
                 llm_infos: list[dict] = []
-                # 裁判 Prompt 的 ${output}：大模型评测取被测模型真实生成回答；向量模型评测无生成能力，取参考答案
+                # 裁判 Prompt 的 ${output}：任务二取被测大模型真实回答；任务一（RAG）取「Top-5 检索 + 大模型生成」的 RAG 答案
                 if is_llm_eval:
                     output_text = await _generate_model_output(tested_llm, query, sem) if has_llm_dims else ""
+                elif has_llm_dims:
+                    output_text = await _generate_rag_output(rag_gen_llm, query, vector_top5[:5], sem)
                 else:
                     output_text = positive
                 for m in dim_metas:
@@ -3235,13 +3271,25 @@ async def _run_eval_task(task_id: str) -> None:
             if task.id in _EVAL_STOP_FLAGS:
                 return
 
-            scores = [{
-                "name": m["name"],
-                "eval_type": m["eval_type"],
-                "metric": (m["eval_config"] or {}).get("metric") if m["eval_type"] == "retrieval" else None,
-                "k": _dim_top_k(m),
-                "score": _dim_score(m, dim_results[m["name"]]),
-            } for m in dim_metas]
+            scores = []
+            for m in dim_metas:
+                m_results = dim_results[m["name"]]
+                # 数值型维度（幻觉率/相关性/完整性等）附带 1~5 分均分，供汇总统计按测评流程展示
+                avg_1_5 = None
+                if m["eval_type"] == "llm_numeric":
+                    vals = [
+                        float(r["value"]) for r in m_results
+                        if isinstance(r.get("value"), (int, float)) and not isinstance(r.get("value"), bool)
+                    ]
+                    avg_1_5 = round(sum(vals) / len(vals), 2) if vals else None
+                scores.append({
+                    "name": m["name"],
+                    "eval_type": m["eval_type"],
+                    "metric": (m["eval_config"] or {}).get("metric") if m["eval_type"] == "retrieval" else None,
+                    "k": _dim_top_k(m),
+                    "score": _dim_score(m, m_results),
+                    "avg": avg_1_5,
+                })
             avg = round(sum(s["score"] for s in scores) / len(scores), 4) if scores else 0.0
 
             task.result = {

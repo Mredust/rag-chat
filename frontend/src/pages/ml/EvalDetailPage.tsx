@@ -13,7 +13,18 @@ import { badgeCls, badgeLabel } from './constants'
 
 type DetailTab = 'detail' | 'metrics'
 
-type Metric = { name: string; score: number; eval_type?: string; metric?: string | null; k?: number | null }
+type Metric = { name: string; score: number; eval_type?: string; metric?: string | null; k?: number | null; avg?: number | null }
+
+/* 维度类型中文名（维度汇总统计表展示） */
+function evalTypeLabel(t?: string): string {
+  const map: Record<string, string> = {
+    llm_classify: '大模型评估-分类型',
+    llm_numeric: '大模型评估-数值型',
+    retrieval: '检索',
+    spearman: '数值一致性',
+  }
+  return map[t ?? ''] ?? t ?? '其他'
+}
 
 /* 超过 8 个字符的内容截断并追加省略号 */
 function truncateText(s: string, max = 8): string {
@@ -400,7 +411,7 @@ export default function EvalDetailPage() {
   const result = task.result ?? {}
   const score = typeof result.score === 'number' ? result.score : 0
   const scorePercent = Math.round(score * 100)
-  const metrics = Array.isArray(result.metrics) ? (result.metrics as Array<{ name: string; score: number; eval_type?: string; metric?: string | null }>) : []
+  const metrics = Array.isArray(result.metrics) ? (result.metrics as Metric[]) : []
   const passCount = typeof result.pass_count === 'number' ? result.pass_count : 0
   const failCount = typeof result.fail_count === 'number' ? result.fail_count : 0
   const total = task.total_count || 0
@@ -576,6 +587,35 @@ export default function EvalDetailPage() {
                   )}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* 卡片三：维度汇总统计（测评流程五：分类型显示通过率，数值型显示 1~5 分均分） */}
+          {metrics.length > 0 && (
+            <div className="rounded-xl border border-slate-200 bg-white p-6">
+              <h3 className="mb-4 text-sm font-semibold text-slate-700">维度汇总统计</h3>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-left text-xs text-slate-500">
+                    <th className="py-2 pr-4 font-medium">测评维度</th>
+                    <th className="py-2 pr-4 font-medium">类型</th>
+                    <th className="py-2 pr-4 font-medium">通过率 / 得分</th>
+                    <th className="py-2 font-medium">均分（1~5）</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {metrics.map((m) => (
+                    <tr key={m.name} className="border-b border-slate-100 last:border-0">
+                      <td className="py-2.5 pr-4 text-slate-700">{m.name}</td>
+                      <td className="py-2.5 pr-4 text-slate-500">{evalTypeLabel(m.eval_type)}</td>
+                      <td className="py-2.5 pr-4 text-slate-700">{(m.score * 100).toFixed(2)}%</td>
+                      <td className="py-2.5 text-slate-700">
+                        {typeof m.avg === 'number' ? m.avg.toFixed(2) : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
 
