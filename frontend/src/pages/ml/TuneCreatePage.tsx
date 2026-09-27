@@ -9,7 +9,7 @@ import { CardRadio, type CardOption } from './components'
 import { sourceHint } from './constants'
 
 const TRAIN_MODE_OPTIONS: CardOption[] = [
-  { value: 'efficient', label: 'LoRA 高效训练', desc: '在训练过程中只更新部分参数，显存占用更低，部分场景能降低过拟合概率' },
+  { value: 'efficient', label: '高效训练', desc: '优化批次组合与进度日志，训练过程更稳定、进度实时可见' },
   { value: 'full', label: '全参训练', desc: '训练时更新模型全部参数，在复杂任务上会有更好效果' },
 ]
 

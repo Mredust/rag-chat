@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,8 +14,24 @@ from app.schemas.knowledge import (
     KnowledgeSpaceCreate,
     KnowledgeSpaceUpdate,
 )
+from app.services.ingest import UPLOAD_DIR
+from app.utils.paths import to_abs_path
 
 logger = logging.getLogger(__name__)
+
+
+def _remove_uploaded_file(storage_path: str | None) -> None:
+    """删除磁盘上的上传文件，仅允许删除 data/uploads 目录内的文件。"""
+    if not storage_path:
+        return
+    target = to_abs_path(storage_path)
+    try:
+        if not target.is_relative_to(UPLOAD_DIR.resolve()):
+            logger.warning("跳过非上传目录内的文件清理: %s", target)
+            return
+        target.unlink(missing_ok=True)
+    except OSError as exc:  # noqa: BLE001 - 清理失败不影响删除主流程
+        logger.warning("上传文件清理失败: %s (%s)", target, exc)
 
 
 # ===== 知识空间 =====
@@ -60,6 +77,10 @@ async def delete_space(db: AsyncSession, space: KnowledgeSpace) -> None:
     remove_space_vectors(space.id)
     await db.delete(space)
     await db.commit()
+    # 清理该空间在磁盘上的全部上传文件
+    space_dir = UPLOAD_DIR / space.id
+    if space_dir.is_dir():
+        shutil.rmtree(space_dir, ignore_errors=True)
     logger.info("知识库删除成功: space_id=%s", space.id)
 
 
@@ -109,8 +130,11 @@ async def delete_document(db: AsyncSession, doc: Document) -> None:
     from app.services.ingest import remove_document_vectors
 
     remove_document_vectors(doc.id)
+    storage_path = doc.storage_path
     await db.delete(doc)
     await db.commit()
+    # 清理磁盘上的上传文件
+    _remove_uploaded_file(storage_path)
     logger.info("文档删除成功: doc_id=%s", doc.id)
 
 

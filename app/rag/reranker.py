@@ -1,9 +1,9 @@
 """重排序：对「问题-文档片段」候选集精细化打分。
 
 架构上采用「两阶段检索」：先轻量召回 Top-N 缩小候选集（retriever），再精细重排序。
-当前默认实现为「词法重叠 + 检索分」的轻量精排（无外部依赖、可离线运行）；
-交叉编码器（Cross-Encoder，如 bge-reranker）属于 M3 算法优化阶段，通过注入
-`score_fn(question, chunks)` 即可无缝替换为真实联合编码打分。
+默认实现由 `build_reranker` 按运行时配置选择：配置了交叉编码器模型（如 bge-reranker）
+时使用「问题-片段」联合编码打分；依赖缺失或模型加载失败时回退为
+「词法重叠 + 检索分」的轻量代理精排（无外部依赖、可离线运行），保证检索链路不中断。
 """
 from __future__ import annotations
 
@@ -84,20 +84,31 @@ class CrossEncoderReranker:
         return sorted(candidates, key=lambda x: x["score"], reverse=True)
 
 
+# 已成功加载的交叉编码器按模型路径缓存，避免每次问答重复加载大模型
+_RERANKER_CACHE: dict[str, Reranker] = {}
+
+
 def build_reranker(cfg: dict[str, str]) -> Reranker:
     """按运行时配置构建重排序器。
 
     - `rerank_enabled` 且 `rerank_model` 已配置时，注入交叉编码器打分；
-    - 依赖缺失 / 加载失败时回退为词法代理重排（不阻断检索链路）。
+    - 依赖缺失 / 加载失败时回退为词法代理重排（不阻断检索链路）；
+    - 加载成功的交叉编码器按模型路径缓存复用。
     """
     enabled = str(cfg.get("rerank_enabled", "")).strip().lower() in {"1", "true", "yes", "on"}
     model = str(cfg.get("rerank_model", "")).strip()
     if enabled and model:
+        # 相对路径基于项目根目录拼接（如 rerankers/bge-reranker-base）
+        model_path = str(to_abs_path(model))
+        cached = _RERANKER_CACHE.get(model_path)
+        if cached is not None:
+            return cached
         try:
-            # 相对路径基于项目根目录拼接（如 rerankers/bge-reranker-base）
-            model_path = to_abs_path(model)
             logger.info("重排序模型准备：加载交叉编码器 %s", model_path)
-            return Reranker(score_fn=CrossEncoderReranker(str(model_path)))
+            reranker = Reranker(score_fn=CrossEncoderReranker(model_path))
         except Exception as exc:  # noqa: BLE001 - 交叉编码器不可用则回退
             logger.warning("交叉编码器加载失败，回退词法代理重排: %s", exc)
+        else:
+            _RERANKER_CACHE[model_path] = reranker
+            return reranker
     return Reranker()

@@ -85,8 +85,8 @@ class MLModel(Base):
     id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: str(uuid.uuid4()))
     name: Mapped[str] = mapped_column(String(50), nullable=False)
     base_model: Mapped[str] = mapped_column(String(128), nullable=False)
-    # 训练方式（如 LoRA）
-    train_method: Mapped[str] = mapped_column(String(16), default="LoRA", nullable=False)
+    # 训练方式（实际训练为对比学习全参数微调，统一记为 sft）
+    train_method: Mapped[str] = mapped_column(String(16), default="sft", nullable=False)
     # 导入来源（本地导入 / 训练产出 / 供应商 provider）
     source: Mapped[str] = mapped_column(String(16), default="upload", nullable=False)
     # 存储桶（预留字段）

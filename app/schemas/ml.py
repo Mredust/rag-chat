@@ -82,7 +82,7 @@ class MLDatasetVersionListResponse(BaseModel):
 class MLModelCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=50)
     base_model: str = Field(..., min_length=1, max_length=128)
-    train_method: str = Field("LoRA", max_length=16)
+    train_method: str = Field("sft", max_length=16)
     source: str = Field("upload", max_length=16)
     bucket: str = Field("", max_length=128)
     model_dir: str = Field("", max_length=512)

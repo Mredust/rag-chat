@@ -244,10 +244,10 @@ async def upload_document(
 
     filename = (file.filename or "unnamed.txt").strip()
     file_type = filename.rsplit(".", 1)[-1].lower() if "." in filename else "txt"
-    if file_type not in {"pdf", "docx", "txt", "md", "json", "jsonl", "html", "xlsx", "csv"}:
+    if file_type not in {"pdf", "doc", "docx", "txt", "md", "json", "jsonl", "html", "xlsx", "csv"}:
         raise BusinessError(
             ErrorCode.INVALID_PARAMETER,
-            message="仅支持 pdf / docx / txt / md / json / jsonl / html / xlsx / csv 格式",
+            message="仅支持 pdf / doc / docx / txt / md / json / jsonl / html / xlsx / csv 格式",
             http_status=400,
         )
 

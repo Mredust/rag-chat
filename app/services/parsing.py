@@ -1,16 +1,18 @@
 """文档解析与文本切片。
 
-- 解析：按扩展名选择解析器（PDF / Docx / TXT / Markdown / JSON / JSONL / HTML / XLSX / CSV），
+- 解析：按扩展名选择解析器（PDF / DOC / Docx / TXT / Markdown / JSON / JSONL / HTML / XLSX / CSV），
   失败时降级为纯文本读取；针对 Docx 识别标题样式、Markdown 保留标题层级，尽量保留文档结构。
+  DOC（Word 97-2003 二进制格式）通过 OLE 复合文档的分片表定位正文并解码。
 - 切片：基于分隔符的递归字符切分 + 重叠，参数可配置
   （chunk_size / chunk_overlap / separators / min_chunk_size / overlap_mode）。
-- 策略匹配：`resolve_strategy` 为「文件类型 + 文本长度区间」绑定最优切分配置。
+- 策略匹配：`resolve_strategy` 为「文件类型 + 文本长度区间」绑定最优切分配置（预留接口，暂未接入主流程）。
 """
 from __future__ import annotations
 
 import csv
 import logging
 import re
+import struct
 import zipfile
 from html.parser import HTMLParser
 from pathlib import Path
@@ -25,7 +27,7 @@ DEFAULT_SEPARATORS = ["\n\n", "\n", "。", "！", "？", "；", ".", "!", "?", "
 def parse_text(file_type: str, file_path: str) -> str:
     """按文件类型解析出纯文本内容。
 
-    支持的 file_type：pdf / docx / txt / md / json / jsonl / html / xlsx / csv。
+    支持的 file_type：pdf / doc / docx / txt / md / json / jsonl / html / xlsx / csv。
     """
     ft = (file_type or "").lower().lstrip(".")
     path = Path(file_path)
@@ -39,6 +41,9 @@ def parse_text(file_type: str, file_path: str) -> str:
         text = "\n\n".join((page.extract_text() or "") for page in reader.pages)
         logger.info("PDF 解析成功: %d 页, 提取 %d 字符", len(reader.pages), len(text))
         return text
+
+    if ft == "doc":
+        return _doc_to_text(str(path))
 
     if ft == "docx":
         try:
@@ -73,6 +78,79 @@ def parse_text(file_type: str, file_path: str) -> str:
     # txt / md / 其它：按文本读取（Markdown 保留原文标题标记）
     text = path.read_text(encoding="utf-8", errors="ignore")
     logger.debug("文本解析完成: type=%s, %d 字符", ft, len(text))
+    return text
+
+
+def _doc_to_text(file_path: str) -> str:
+    """解析 Word 97-2003（.doc）二进制格式，抽取正文文本。
+
+    通过 OLE 复合文档读取 WordDocument 主流与对应的表流（0Table/1Table），
+    从 FIB 定位 CLX 分片表，再按每个 PCD 的压缩标志解码文本片段：
+    压缩片段按 8 位字符解码，未压缩片段按 UTF-16LE 解码。最后把段落标记、
+    单元格标记与分页符统一转换为换行，便于后续切片。
+    """
+    try:
+        import olefile
+    except ImportError as exc:  # pragma: no cover
+        raise RuntimeError("缺少 olefile 依赖，无法解析 DOC") from exc
+
+    ole = olefile.OleFileIO(file_path)
+    try:
+        if not ole.exists("WordDocument"):
+            raise ValueError("DOC 文件缺少 WordDocument 流，不是合法的 Word 文档")
+        word = ole.openstream("WordDocument").read()
+        flags = struct.unpack_from("<H", word, 0x0A)[0]
+        table_name = "1Table" if (flags >> 9) & 1 else "0Table"
+        if not ole.exists(table_name):
+            table_name = "0Table" if table_name == "1Table" else "1Table"
+        table = ole.openstream(table_name).read() if ole.exists(table_name) else b""
+        fc_clx, lcb_clx = struct.unpack_from("<II", word, 0x01A2)
+        if lcb_clx == 0 or fc_clx + lcb_clx > len(table):
+            raise ValueError("DOC 分片表读取失败，文件可能已加密或损坏")
+        clx = table[fc_clx:fc_clx + lcb_clx]
+    finally:
+        ole.close()
+
+    # CLX：若干 Prc（0x01，跳过）后跟一个 Pcdt（0x02，分片表）
+    pcdt = b""
+    idx = 0
+    while idx < len(clx):
+        if clx[idx] == 0x01:
+            cb = struct.unpack_from("<H", clx, idx + 1)[0]
+            idx += 3 + cb
+        elif clx[idx] == 0x02:
+            lcb = struct.unpack_from("<I", clx, idx + 1)[0]
+            pcdt = clx[idx + 5:idx + 5 + lcb]
+            break
+        else:
+            idx += 1
+    if len(pcdt) < 16:
+        raise ValueError("DOC 分片表格式异常，无法解析正文")
+
+    piece_count = (len(pcdt) - 4) // 12
+    cps = [struct.unpack_from("<I", pcdt, 4 * i)[0] for i in range(piece_count + 1)]
+    pcd_base = 4 * (piece_count + 1)
+    parts: list[str] = []
+    for i in range(piece_count):
+        fc = struct.unpack_from("<I", pcdt, pcd_base + 8 * i + 2)[0]
+        char_len = max(cps[i + 1] - cps[i], 0)
+        if fc & 0x40000000:
+            offset = fc & 0x3FFFFFFF
+            parts.append(word[offset:offset + char_len].decode("cp1252", errors="ignore"))
+        else:
+            offset = fc
+            parts.append(word[offset:offset + char_len * 2].decode("utf-16-le", errors="ignore"))
+
+    text = "".join(parts)
+    # 域代码（TOC、PAGEREF 等）：丢弃“域开始→分隔符”之间的指令文本，保留域结果
+    text = re.sub(r"\x13[^\x14\x15]*\x14", "", text)
+    text = re.sub(r"\x13[^\x15]*\x15", "", text)
+    # 0x0D 段落标记、0x07 表格单元格/行结束、0x0C 分页符均转换为换行
+    text = re.sub(r"[\r\x07\x0c]", "\n", text)
+    # 去除其余控制字符（保留制表符），避免污染切片内容
+    text = re.sub(r"[\x00-\x08\x0b\x0e-\x1f]", "", text)
+    text = re.sub(r"\n{3,}", "\n\n", text).strip()
+    logger.info("DOC 解析完成: %d 个文本分片, 提取 %d 字符", piece_count, len(text))
     return text
 
 
