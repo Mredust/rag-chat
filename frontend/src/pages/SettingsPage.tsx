@@ -35,8 +35,16 @@ const LABELS: Record<string, string> = {
   rerank_model: '重排序模型',
   rerank_top_m: '重排序候选数 (Top-M)',
   rrf_k: 'RRF 融合常数',
+  cleanup_upload_files: '入库后清理上传文件',
   prompt_system: '通用系统提示词',
   prompt_rag: 'RAG 提示词模板',
+}
+
+/* 布尔型配置（渲染为开关） */
+const BOOLEAN_KEYS = ['rerank_enabled', 'cleanup_upload_files']
+const BOOLEAN_HINTS: Record<string, [string, string]> = {
+  rerank_enabled: ['已启用（交叉编码器精排）', '已关闭（回退词法代理重排）'],
+  cleanup_upload_files: ['入库成功后自动删除原始上传文件', '保留原始上传文件（可重新切片）'],
 }
 
 type Category =
@@ -80,7 +88,7 @@ const CATEGORIES: Category[] = [
     description: '检索与切片相关参数',
     icon: GitBranch,
     kind: 'config',
-    keys: ['retrieval_mode', 'top_k', 'similarity_threshold', 'chunk_size', 'chunk_overlap'],
+    keys: ['retrieval_mode', 'top_k', 'similarity_threshold', 'chunk_size', 'chunk_overlap', 'cleanup_upload_files'],
   },
   {
     id: 'rerank',
@@ -264,7 +272,7 @@ function ConfigField({
         )}
       </label>
 
-      {config.key === 'rerank_enabled' ? (
+      {BOOLEAN_KEYS.includes(config.key) ? (
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -279,7 +287,9 @@ function ConfigField({
             />
           </button>
           <span className="text-sm text-slate-600">
-            {value === 'true' ? '已启用（交叉编码器精排）' : '已关闭（回退词法代理重排）'}
+            {value === 'true'
+              ? (BOOLEAN_HINTS[config.key]?.[0] ?? '已启用')
+              : (BOOLEAN_HINTS[config.key]?.[1] ?? '已关闭')}
           </span>
         </div>
       ) : config.key === 'embedding_model' ? (

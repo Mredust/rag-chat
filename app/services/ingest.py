@@ -53,6 +53,78 @@ def schedule_ingest(doc_id: str, strategy_config: dict | None = None) -> None:
     asyncio.create_task(process_document(doc_id))
 
 
+# ---- 数据库兜底命中后的向量异步回填（读写一致性自愈） ----
+# 进程内去重：防止并发请求对同一批 chunk 重复嵌入
+_BACKFILL_INFLIGHT: set[str] = set()
+# 持有后台任务引用，避免被垃圾回收导致回填中断
+_BACKFILL_TASKS: set[asyncio.Task] = set()
+
+
+def schedule_backfill(chunks: list[dict], cfg: dict) -> None:
+    """分层检索第二层（数据库）命中后，异步把缺失向量补齐到向量库，不阻塞本次回答。"""
+    if not chunks:
+        return
+    task = asyncio.create_task(backfill_vectors(chunks, cfg))
+    _BACKFILL_TASKS.add(task)
+    task.add_done_callback(_BACKFILL_TASKS.discard)
+
+
+async def backfill_vectors(chunks: list[dict], cfg: dict) -> int:
+    """把「MySQL 已有、Chroma 缺失」的切片向量异步补齐，保证读写一致。
+
+    一致性保证：
+    - 写前再查一次主库，只回填仍存在的切片（避免与删除文档竞态产生孤儿向量）；
+    - 按 chunk_id 幂等 upsert，重复调用/多请求并发安全；
+    - 内容取自主库（MySQL 为读写基准），嵌入失败仅告警，由下次回填或启动自检修重试。
+    """
+    ids = [str(c.get("chunk_id") or "") for c in chunks]
+    ids = [i for i in ids if i and i not in _BACKFILL_INFLIGHT]
+    if not ids:
+        return 0
+    _BACKFILL_INFLIGHT.update(ids)
+    try:
+        async with SessionLocal() as db:
+            rows = (
+                (await db.execute(select(Chunk).where(Chunk.id.in_(ids)))).scalars().all()
+            )
+        if not rows:
+            return 0  # 切片已被删除，不写入（防孤儿向量）
+        collection = get_collection()
+        existing = set(
+            await asyncio.to_thread(_existing_vector_ids, collection, [c.id for c in rows])
+        )
+        missing = [c for c in rows if c.id not in existing]
+        if not missing:
+            return 0
+        embedder = build_embedder(cfg)
+        vectors = await asyncio.to_thread(embedder.embed, [c.content for c in missing])
+        await asyncio.to_thread(
+            collection.upsert,
+            ids=[c.id for c in missing],
+            documents=[c.content for c in missing],
+            metadatas=[
+                {"space_id": c.space_id, "document_id": c.document_id, "chunk_id": c.id}
+                for c in missing
+            ],
+            embeddings=vectors,
+        )
+        logger.info("向量库异步回填完成: %d/%d 条", len(missing), len(ids))
+        return len(missing)
+    except Exception as exc:  # noqa: BLE001 - 回填失败不影响本次回答
+        logger.warning("向量库异步回填失败（下次检索或启动自检会重试）: %s", exc)
+        return 0
+    finally:
+        _BACKFILL_INFLIGHT.difference_update(ids)
+
+
+def _existing_vector_ids(collection, ids: list[str]) -> set[str]:
+    """查询给定 chunk_id 中已存在于向量库的 ID 集合。"""
+    try:
+        return set(collection.get(ids=ids).get("ids") or [])
+    except Exception:  # noqa: BLE001 - 查询失败按「全部缺失」处理（upsert 幂等）
+        return set()
+
+
 # 中断后可恢复的文档状态（进程异常退出会导致后台协程终止，文档停留在这些中间态）
 _RESUMABLE_STATUSES = {
     DocumentStatus.PENDING.value,
@@ -201,6 +273,10 @@ async def _process(db: AsyncSession, doc: Document) -> None:
     ]
     db.add_all(chunk_rows)
     await db.flush()  # 先生成 chunk.id
+    # 读写一致性：先提交主库（MySQL 切片），再写向量库（Chroma）。
+    # 若向量写入中途失败，主库有、向量库缺 → 分层检索第二层数据库兜底可用，
+    # 且异步回填/启动自检会补齐向量；避免「向量库有、主库无」的孤儿向量命中脏数据。
+    await db.commit()
 
     # 4) 向量写入 Chroma
     collection = get_collection()
@@ -226,6 +302,33 @@ async def _process(db: AsyncSession, doc: Document) -> None:
     doc.processed_at = datetime.now()
     await db.commit()
 
+    # 6) 可选：入库成功后清理原始上传文件（切片已入 MySQL、向量已入 Chroma，检索不依赖原文件）
+    #    注意：清理后无法重新解析/重新切片该文档，需重新上传；开关 cleanup_upload_files（默认开启）
+    if str(cfg.get("cleanup_upload_files", "true")).strip().lower() in ("1", "true", "yes", "on"):
+        _cleanup_upload_file(doc.storage_path)
+
+
+def _cleanup_upload_file(storage_path: str | None) -> None:
+    """删除 data/uploads 下的上传原文件（仅限上传目录内），并清理随之变空的目录。"""
+    if not storage_path:
+        return
+    target = to_abs_path(storage_path)
+    upload_root = UPLOAD_DIR.resolve()
+    try:
+        if not target.is_relative_to(upload_root):
+            return
+        target.unlink(missing_ok=True)
+        parent = target.parent
+        while parent != upload_root and parent.is_relative_to(upload_root):
+            try:
+                parent.rmdir()
+            except OSError:
+                break
+            parent = parent.parent
+        logger.info("已清理上传原文件（切片/向量已入库）: %s", storage_path)
+    except OSError as exc:  # noqa: BLE001 - 清理失败不影响入库结果
+        logger.warning("清理上传原文件失败: %s (%s)", storage_path, exc)
+
 
 def remove_document_vectors(document_id: str) -> None:
     """删除某文档在 Chroma 中的全部向量。"""
@@ -243,3 +346,58 @@ def remove_space_vectors(space_id: str) -> None:
         collection.delete(where={"space_id": space_id})
     except Exception:  # noqa: BLE001
         pass
+
+
+async def repair_vectors() -> tuple[int, int]:
+    """对齐 MySQL 切片与 Chroma 向量（返回：补齐向量数, 清理孤儿向量数）。
+
+    两边可能因跨机器同步、库恢复、向量目录漂移等原因不一致：
+    - MySQL 有切片但 Chroma 缺向量 → 向量检索命中为 0（语义检索失效）；
+    - Chroma 有向量但 MySQL 无切片 → 孤儿向量，白白占用存储且可能命中脏数据。
+    幂等：仅在有差异时做嵌入/删除，健康状态只做一次 ID 比对（开销很小）。
+    """
+    collection = get_collection()
+    async with SessionLocal() as db:
+        chunks = (await db.execute(select(Chunk))).scalars().all()
+        cfg = await config_service.get_runtime(db)
+    valid: dict[str, Chunk] = {c.id: c for c in chunks}
+    existing = set(collection.get()["ids"])
+
+    orphan = sorted(existing - set(valid))
+    missing = [cid for cid in valid if cid not in existing]
+
+    if not orphan and not missing:
+        return 0, 0
+
+    logger.warning(
+        "向量库与切片表不一致: 缺失向量=%d, 孤儿向量=%d，开始对齐",
+        len(missing), len(orphan),
+    )
+
+    removed = 0
+    for i in range(0, len(orphan), 500):
+        batch = orphan[i:i + 500]
+        await asyncio.to_thread(collection.delete, ids=batch)
+        removed += len(batch)
+
+    embedded = 0
+    if missing:
+        embedder = build_embedder(cfg)
+        items = [valid[cid] for cid in missing]
+        for i in range(0, len(items), 64):
+            batch = items[i:i + 64]
+            vectors = await asyncio.to_thread(embedder.embed, [c.content for c in batch])
+            await asyncio.to_thread(
+                collection.upsert,
+                ids=[c.id for c in batch],
+                documents=[c.content for c in batch],
+                metadatas=[
+                    {"space_id": c.space_id, "document_id": c.document_id, "chunk_id": c.id}
+                    for c in batch
+                ],
+                embeddings=vectors,
+            )
+            embedded += len(batch)
+            logger.info("向量补齐进度: %d/%d", embedded, len(missing))
+    logger.info("向量库对齐完成: 补齐=%d, 清理孤儿=%d", embedded, removed)
+    return embedded, removed

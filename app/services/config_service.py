@@ -63,6 +63,8 @@ def _defaults() -> dict[str, str]:
         "rerank_model": "rerankers/bge-reranker-base",
         "rerank_top_m": "20",
         "rrf_k": "60",
+        # 入库成功后清理 data/uploads 原始文件（切片/向量已落库，检索不依赖原文件；重新切片需重新上传）
+        "cleanup_upload_files": "true",
         "prompt_system": DEFAULT_PROMPT_SYSTEM,
         "prompt_rag": DEFAULT_PROMPT_RAG,
         "max_tokens": "2048",

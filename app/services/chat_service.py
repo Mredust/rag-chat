@@ -1,6 +1,7 @@
-"""统一智能问答业务：RAG 检索 + Agent 工具调用，流式返回。
+"""统一智能问答业务：RAG 分层检索 + Agent 工具调用，流式返回。
 
-数据流：用户提问 → （有知识空间时）混合检索 → Agent 工具循环（Function Calling）
+数据流：用户提问 → （有知识空间时）分层检索（①向量库 → ②数据库兜底，命中则异步回填向量）
+→ 两层皆空时交由 LLM 通用回答或系统内置话术 → Agent 工具循环（Function Calling）
 → LLM 流式生成 → 落库对话记录。
 
 自动路由：模型根据问题是否需要工具自行决定——需要计算/时间/检索等能力时调用
@@ -24,6 +25,7 @@ from app.models.knowledge import Chunk, Document, KnowledgeSpace
 from app.rag.reranker import build_reranker
 from app.rag.retriever import Retriever
 from app.services import config_service
+from app.services.ingest import schedule_backfill
 
 logger = logging.getLogger(__name__)
 
@@ -167,10 +169,12 @@ async def _semantic_search(db, embedder, query: str, space_id: str | None, user_
         rrf_k=config_service.get_int(cfg, "rrf_k", 60),
     )
     top_k = config_service.get_int(cfg, "top_k", 3)
-    chunks = await retriever.retrieve(
+    chunks, layer = await retriever.retrieve_layered(
         db, query, space_id, "hybrid", top_k, 0.0,
         rerank_top_m=config_service.get_int(cfg, "rerank_top_m", top_k * 3),
     )
+    if layer == "db":
+        schedule_backfill(chunks, cfg)
     if not chunks:
         return "未检索到相关内容"
     return json.dumps([{"片段": c["content"][:300]} for c in chunks], ensure_ascii=False)
@@ -414,17 +418,22 @@ async def chat_stream(
             top_k = config_service.get_int(cfg, "top_k", 5)
             threshold = config_service.get_float(cfg, "similarity_threshold", 0.0)
             rerank_top_m = config_service.get_int(cfg, "rerank_top_m", top_k * 3)
-            chunks = await retriever.retrieve(
+            # 分层检索：① 向量库 → ② 数据库兜底 → ③ none（由下方 LLM/内置话术兜底）
+            chunks, layer = await retriever.retrieve_layered(
                 db, question, space_id, mode, top_k, threshold, rerank_top_m
             )
+            if layer == "db":
+                # 数据库兜底命中：异步补齐向量库（幂等、不阻塞本次回答，读写一致）
+                schedule_backfill(chunks, cfg)
             citations = await _build_citations(db, chunks)
             context = _build_rag_context(
                 chunks, config_service.get_int(cfg, "rag_context_max_chars", 3000)
             )
             logger.info(
-                "RAG 前置检索: space_id=%s, mode=%s, 命中=%d, context 长度=%d",
+                "RAG 分层检索: space_id=%s, mode=%s, 层级=%s, 命中=%d, context 长度=%d",
                 space_id,
                 mode,
+                layer,
                 len(chunks),
                 len(context),
             )

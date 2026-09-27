@@ -91,6 +91,8 @@ def setup_logging() -> None:
     # 降噪：httpx/httpcore 会打印底层 HTTP 请求日志，改为 WARNING，请求详情由业务层记录
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
+    # 降噪：watchfiles 热重载变更检测（DEBUG 噪音；其自身写日志会再次被检测到形成循环）
+    logging.getLogger("watchfiles").setLevel(logging.WARNING)
 
     log_format = os.getenv("LOG_FORMAT", "text").lower()
     formatter: logging.Formatter = JsonFormatter() if log_format == "json" else TextFormatter()

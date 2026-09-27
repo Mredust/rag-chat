@@ -3,7 +3,8 @@
 - vector_search：语义召回，走 Chroma 向量库；
 - fulltext_search：关键词召回，走 MySQL FULLTEXT 索引（含 LIKE 降级）；
 - hybrid_search：RRF（Reciprocal Rank Fusion）融合两路候选；
-- retrieve：统一入口，按模式（vector / fulltext / hybrid）返回 Top-K，再做重排序。
+- retrieve：统一入口，按模式（vector / fulltext / hybrid）返回 Top-K，再做重排序；
+- retrieve_layered：分层入口，① 向量库 → ② 数据库兜底 → ③ none（上层 LLM/内置兜底）。
 """
 from __future__ import annotations
 
@@ -135,6 +136,39 @@ class Retriever:
         rows = (await db.execute(sql, params)).mappings().all()
         return list(rows)
 
+    # ---- 排序与重排 ----
+    def _rank(
+        self,
+        question: str,
+        mode: str,
+        candidates: list[RetrievedChunk],
+        top_k: int,
+        rerank_top_m: int | None,
+        rerank: bool,
+    ) -> list[RetrievedChunk]:
+        # 按分数降序
+        candidates.sort(key=lambda x: x["score"], reverse=True)
+
+        # 不重排序的策略（纯向量/纯全文/纯混合 RRF）直接取前 Top-K
+        if not rerank:
+            ranked = candidates[:top_k]
+            logger.info(
+                "RAG 检索: mode=%s, top_k=%d, 命中=%d（无重排序）", mode, top_k, len(ranked)
+            )
+            return ranked
+
+        # 取候选集交给重排序器精排
+        m = rerank_top_m if rerank_top_m is not None else max(top_k, 1) * 3
+        ranked = self.reranker.rerank(question, candidates[: max(m, 1)], top_k=top_k)
+        logger.info(
+            "RAG 检索: mode=%s, top_k=%d, 候选=%d, 精排后=%d",
+            mode,
+            top_k,
+            len(candidates[: max(m, 1)]),
+            len(ranked),
+        )
+        return ranked
+
     # ---- 统一入口 ----
     async def retrieve(
         self,
@@ -149,37 +183,89 @@ class Retriever:
     ) -> list[RetrievedChunk]:
         if mode == "vector":
             candidates = self.vector_search(question, space_id, top_k)
+            # 相似度阈值作用于向量相似度分数（1/(1+L2)，归一化向量下≈余弦语义）
+            candidates = [c for c in candidates if c["score"] >= threshold]
             logger.debug("向量检索召回: top_k=%d, 命中=%d", top_k, len(candidates))
         elif mode == "fulltext":
+            # 全文命中按关键词相关性排序，不适用相似度阈值（阈值语义是向量相似度）
             candidates = await self.fulltext_search(db, question, space_id, top_k)
             logger.debug("全文检索召回: top_k=%d, 命中=%d", top_k, len(candidates))
-        else:  # hybrid：两路召回 + RRF 融合
+        else:  # hybrid：两路召回（向量先按阈值过滤）+ RRF 融合
             vec = self.vector_search(question, space_id, top_k)
+            vec = [c for c in vec if c["score"] >= threshold]
             ft = await self.fulltext_search(db, question, space_id, top_k)
             candidates = _rrf_merge(vec, ft, k=self.rrf_k)
-            logger.debug("混合检索召回: 向量=%d, 全文=%d, 融合后=%d", len(vec), len(ft), len(candidates))
+            logger.debug(
+                "混合检索召回: 向量=%d(阈值过滤后), 全文=%d, 融合后=%d",
+                len(vec), len(ft), len(candidates),
+            )
+        return self._rank(question, mode, candidates, top_k, rerank_top_m, rerank)
 
-        # 相似度阈值过滤
-        candidates = [c for c in candidates if c["score"] >= threshold]
+    # ---- 分层检索：① 向量库 → ② 数据库兜底 ----
+    async def retrieve_layered(
+        self,
+        db: AsyncSession,
+        question: str,
+        space_id: str,
+        mode: str = "hybrid",
+        top_k: int = 5,
+        threshold: float = 0.0,
+        rerank_top_m: int | None = None,
+        rerank: bool = True,
+    ) -> tuple[list[RetrievedChunk], str]:
+        """按约定的分层检索策略返回 (结果, 层级)。
 
-        # 按分数降序
-        candidates.sort(key=lambda x: x["score"], reverse=True)
+        层级：
+        - "vector"：第一层向量库（Chroma）命中，直接返回检索结果；
+        - "db"：向量库无命中/不可用，第二层数据库（MySQL 全文/LIKE）兜底命中，
+          返回结果并由调用方异步补齐向量（读写一致，幂等 upsert）；
+        - "none"：两层皆空，交由上层决定 LLM 兜底或系统内置回答。
+        向量库异常（索引损坏、目录漂移）按「向量库不存在」降级，不阻断检索。
+        """
+        # ---- 第一层：向量库 ----
+        vector_raw: list[RetrievedChunk] = []
+        if mode in ("vector", "hybrid"):
+            try:
+                vector_raw = self.vector_search(question, space_id, top_k)
+            except Exception as exc:  # noqa: BLE001 - 向量库不可用时降级到数据库层
+                logger.error("向量库检索异常（降级到数据库层）: %s", exc)
 
-        # 不重排序的策略（纯向量/纯全文/纯混合 RRF）直接取前 Top-K
-        if not rerank:
-            ranked = candidates[:top_k]
-            logger.info("RAG 检索: mode=%s, top_k=%d, 命中=%d（无重排序）", mode, top_k, len(ranked))
-            return ranked
+        if mode == "fulltext":
+            db_hits = await self.fulltext_search(db, question, space_id, top_k)
+            if db_hits:
+                return self._rank(question, mode, db_hits, top_k, rerank_top_m, rerank), "db"
+            logger.info("分层检索: mode=%s, 层级=none（数据库无命中）", mode)
+            return [], "none"
 
-        # 取候选集交给重排序器精排
-        m = rerank_top_m if rerank_top_m is not None else max(top_k, 1) * 3
-        ranked = self.reranker.rerank(question, candidates[: max(m, 1)], top_k=top_k)
+        vec_ok = [c for c in vector_raw if c["score"] >= threshold]
+        if mode == "vector":
+            if vec_ok:
+                return (
+                    self._rank(question, mode, vec_ok, top_k, rerank_top_m, rerank),
+                    "vector",
+                )
+        else:  # hybrid（含未知模式）：向量 + 全文 RRF 融合
+            ft = await self.fulltext_search(db, question, space_id, top_k)
+            merged = _rrf_merge(vec_ok, ft, k=self.rrf_k)
+            if merged:
+                layer = "vector" if vector_raw else "db"
+                return self._rank(question, mode, merged, top_k, rerank_top_m, rerank), layer
+
+        # ---- 第二层：数据库兜底（向量库无命中时查询 MySQL） ----
+        if mode == "vector":
+            db_hits = await self.fulltext_search(db, question, space_id, top_k)
+            if db_hits:
+                logger.info(
+                    "分层检索: 向量库未命中，数据库兜底命中=%d, space_id=%s",
+                    len(db_hits), space_id,
+                )
+                return (
+                    self._rank(question, mode, db_hits, top_k, rerank_top_m, rerank),
+                    "db",
+                )
 
         logger.info(
-            "RAG 检索: mode=%s, top_k=%d, 候选=%d, 精排后=%d",
-            mode,
-            top_k,
-            len(candidates[: max(m, 1)]),
-            len(ranked),
+            "分层检索: mode=%s, 向量库=%d, 层级=none（交由上层 LLM/内置兜底）",
+            mode, len(vector_raw),
         )
-        return ranked
+        return [], "none"

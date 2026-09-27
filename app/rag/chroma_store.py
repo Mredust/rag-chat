@@ -7,19 +7,33 @@ from __future__ import annotations
 
 import logging
 from functools import lru_cache
+from pathlib import Path
 
 import chromadb
 
-from app.core.config import settings
+from app.core.config import BASE_DIR, settings
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_persist_dir() -> str:
+    """Chroma 持久化目录转绝对路径（相对路径按项目根解析）。
+
+    相对路径会随进程启动目录（CWD）漂移：不同方式启动时会连到不同的 Chroma 库，
+    造成「MySQL 有切片但向量库为空」的检索命中为 0 问题。
+    """
+    path = Path(settings.CHROMA_PERSIST_DIR)
+    if not path.is_absolute():
+        path = BASE_DIR / path
+    return str(path)
 
 
 @lru_cache
 def get_client() -> chromadb.ClientAPI:
     """返回全局共享的 Chroma 持久化客户端（本地目录模式）。"""
-    client = chromadb.PersistentClient(path=settings.CHROMA_PERSIST_DIR)
-    logger.info("向量库准备：Chroma 持久化客户端已连接 (path=%s)", settings.CHROMA_PERSIST_DIR)
+    persist_dir = _resolve_persist_dir()
+    client = chromadb.PersistentClient(path=persist_dir)
+    logger.info("向量库准备：Chroma 持久化客户端已连接 (path=%s)", persist_dir)
     return client
 
 

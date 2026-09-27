@@ -48,6 +48,20 @@ async def lifespan(app: FastAPI):
     if resumed_docs:
         logger.info("已恢复 %d 个中断的文档入库任务", resumed_docs)
 
+    # 4. 向量一致性自检（后台）：补齐 MySQL 有切片但 Chroma 缺失的向量、清理孤儿向量。
+    #    两边不同步（跨机器同步/库恢复/向量目录漂移）会导致向量检索命中为 0。
+    import asyncio
+
+    async def _reconcile_vectors() -> None:
+        try:
+            embedded, removed = await ingest.repair_vectors()
+            if embedded or removed:
+                logger.info("向量库对齐完成: 补齐=%d, 清理孤儿=%d", embedded, removed)
+        except Exception as exc:  # noqa: BLE001 - 自检失败不阻断启动
+            logger.warning("向量库自检失败: %s", exc)
+
+    asyncio.create_task(_reconcile_vectors())
+
     logger.info("应用启动完成")
     yield
 
@@ -118,6 +132,21 @@ async def health():
     return {"status": "ok"}
 
 
+class _SimpleFormatter(logging.Formatter):
+    """uvicorn 日志简洁格式。
+
+    必须定义在模块顶层（不能放在 __main__ 守卫内）：reload 模式下子进程以
+    spawn 方式启动时会以 __mp_main__ 重新导入本文件，守卫内的类不会被定义，
+    导致日志配置反序列化失败（AttributeError: Can't get attribute '_SimpleFormatter'）。
+    """
+
+    def __init__(self):
+        super().__init__(
+            fmt="%(asctime)s %(levelname)s:  %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+
+
 if __name__ == "__main__":
     import uvicorn
     from logging.handlers import TimedRotatingFileHandler
@@ -126,13 +155,6 @@ if __name__ == "__main__":
     # 将 uvicorn 访问/错误日志输出到 logs/ 目录（按日滚动）
     log_dir = Path("logs")
     log_dir.mkdir(exist_ok=True)
-
-    class _SimpleFormatter(logging.Formatter):
-        def __init__(self):
-            super().__init__(
-                fmt="%(asctime)s %(levelname)s:  %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S",
-            )
 
     _uvicorn_log_config = {
         "version": 1,
@@ -161,20 +183,14 @@ if __name__ == "__main__":
                 "backupCount": 30,
                 "encoding": "utf-8",
             },
-            "file_access": {
-                "class": "logging.handlers.TimedRotatingFileHandler",
-                "formatter": "access",
-                "filename": str(log_dir / "access.log"),
-                "when": "midnight",
-                "interval": 1,
-                "backupCount": 30,
-                "encoding": "utf-8",
-            },
+            # 不再单独写 logs/access.log：reload 模式下父进程与子进程同时持有该文件，
+            # Windows 跨进程重命名失败会导致每次请求打印 PermissionError 堆栈；
+            # 访问日志已由 main.py 的 log_requests 中间件统一写入 logs/app.log。
         },
         "loggers": {
             "uvicorn": {"handlers": ["console", "file_uvicorn"], "level": "INFO", "propagate": False},
             "uvicorn.error": {"level": "INFO"},
-            "uvicorn.access": {"handlers": ["console_access", "file_access"], "level": "INFO", "propagate": False},
+            "uvicorn.access": {"handlers": ["console_access"], "level": "INFO", "propagate": False},
         },
     }
 
@@ -183,5 +199,8 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=4040,
         reload=True,
+        # 只热重载代码文件：logs/自写日志、data/向量与上传、frontend/dist 构建产物
+        # 不应触发重启（否则每次请求写日志都会引发重启循环）
+        reload_excludes=["logs/*", "data/*", "frontend/dist/*", "*.log"],
         log_config=_uvicorn_log_config,
     )
