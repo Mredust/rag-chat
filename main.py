@@ -34,6 +34,16 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.info("数据库准备完成")
 
+    # 1.5 首次启动（空库）导入内置数据 ragchat.sql；库中已有数据则自动跳过
+    from app.db.seed import load_builtin_data
+
+    try:
+        seeded = await load_builtin_data()
+        if seeded:
+            logger.info("内置数据装载完成，后续启动将自动跳过")
+    except Exception as exc:  # noqa: BLE001 - 装载失败不阻断启动，事务已回滚，下次启动重试
+        logger.warning("内置数据装载失败（下次启动将重试）: %s", exc)
+
     # 2. 回收上次异常中断遗留的评测任务（pending/running → stopped）
     from app.services import ml_service
 
