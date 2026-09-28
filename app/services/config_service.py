@@ -42,18 +42,20 @@ _runtime_cache: dict[str, str] | None = None
 
 
 def _defaults() -> dict[str, str]:
+    # LLM / Embedding 不走环境变量（供应商与本地模式由系统设置页运行时覆盖），
+    # 这里仅作为「系统设置」表尚无记录时的兜底种子值
     return {
-        "llm_api_base": settings.LLM_API_BASE,
-        "llm_api_key": settings.LLM_API_KEY,
-        "llm_model": settings.LLM_MODEL,
+        "llm_api_base": "https://api.deepseek.com",
+        "llm_api_key": "",
+        "llm_model": "deepseek-v4-flash",
         # 多模型兜底列表（逗号分隔），为空时回退 llm_model
         "llm_models": "",
         "llm_timeout": "120",
         "llm_max_retries": "1",
-        "embedding_api_base": settings.EMBEDDING_API_BASE,
-        "embedding_api_key": settings.EMBEDDING_API_KEY,
-        "embedding_model": settings.EMBEDDING_MODEL,
-        "embedding_dim": str(settings.EMBEDDING_DIM),
+        "embedding_api_base": "",
+        "embedding_api_key": "",
+        "embedding_model": "bge-large-zh-v1.5",
+        "embedding_dim": "1024",
         "retrieval_mode": "hybrid",
         "top_k": "5",
         "similarity_threshold": "0.0",

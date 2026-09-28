@@ -21,7 +21,7 @@ import threading
 from pathlib import Path
 from typing import Iterable
 
-from app.core.config import BASE_DIR, resolve_torch_device, settings
+from app.core.config import BASE_DIR, resolve_torch_device
 
 logger = logging.getLogger(__name__)
 

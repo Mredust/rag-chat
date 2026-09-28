@@ -20,30 +20,19 @@ class Settings(BaseSettings):
 
     # ---- 应用 ----
     APP_NAME: str = "rag-chat"
-    DEBUG: bool = True
     LOG_LEVEL: str = "DEBUG"
+    LOG_FORMAT: str = "text"
 
     # ---- 数据库（MySQL）----
     MYSQL_HOST: str = "localhost"
     MYSQL_PORT: int = 3306
     MYSQL_USER: str = "root"
-    MYSQL_PASSWORD: str = "mredust4"
+    MYSQL_PASSWORD: str = "123456"
     MYSQL_DB: str = "ragchat"
 
     # ---- 向量数据库（Chroma）----
     CHROMA_PERSIST_DIR: str = "./data/chroma"
     CHROMA_COLLECTION: str = "knowledge_chunks"
-
-    # ---- 大模型（LLM，OpenAI 兼容）----
-    LLM_API_BASE: str = "https://api.deepseek.com"
-    LLM_API_KEY: str = ""
-    LLM_MODEL: str = "deepseek-chat"
-
-    # ---- Embedding（OpenAI 兼容 / 本地）----
-    EMBEDDING_API_BASE: str = ""
-    EMBEDDING_API_KEY: str = ""
-    EMBEDDING_MODEL: str = "bge-large-zh-v1.5"
-    EMBEDDING_DIM: int = 1024
 
     # ---- 计算设备（本地向量模型加载与微调训练）----
     # 可选：cpu / cuda / cuda:0 / auto（auto 时按 CUDA 是否可用自动选择）
@@ -61,14 +50,6 @@ class Settings(BaseSettings):
         """异步连接串（asyncmy）。"""
         return (
             f"mysql+asyncmy://{self.MYSQL_USER}:{self.MYSQL_PASSWORD}"
-            f"@{self.MYSQL_HOST}:{self.MYSQL_PORT}/{self.MYSQL_DB}?charset=utf8mb4"
-        )
-
-    @property
-    def sync_database_url(self) -> str:
-        """同步连接串（pymysql，Alembic 等使用）。"""
-        return (
-            f"mysql+pymysql://{self.MYSQL_USER}:{self.MYSQL_PASSWORD}"
             f"@{self.MYSQL_HOST}:{self.MYSQL_PORT}/{self.MYSQL_DB}?charset=utf8mb4"
         )
 

@@ -15,7 +15,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai import build_embedder
-from app.core.config import BASE_DIR, settings
+from app.core.config import BASE_DIR
 from app.db.database import SessionLocal
 from app.models.knowledge import Chunk, Document, DocumentStatus
 from app.rag.chroma_store import get_collection

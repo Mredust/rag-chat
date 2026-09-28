@@ -78,13 +78,15 @@ def setup_logging() -> None:
         return
     root._rag_chat_configured = True
 
-    # 优先从应用配置读取日志级别（.env 由 pydantic-settings 加载，os.getenv 无法读取）
+    # 优先从应用配置读取（.env 由 pydantic-settings 加载，os.getenv 无法读取）
     try:
         from app.core.config import settings as _settings
 
         log_level_name = str(getattr(_settings, "LOG_LEVEL", None) or os.getenv("LOG_LEVEL", "DEBUG"))
+        log_format = str(getattr(_settings, "LOG_FORMAT", None) or os.getenv("LOG_FORMAT", "text")).lower()
     except Exception:  # noqa: BLE001
         log_level_name = os.getenv("LOG_LEVEL", "DEBUG")
+        log_format = os.getenv("LOG_FORMAT", "text").lower()
     level = getattr(logging, log_level_name.upper(), logging.DEBUG)
     root.setLevel(level)
 
@@ -94,7 +96,6 @@ def setup_logging() -> None:
     # 降噪：watchfiles 热重载变更检测（DEBUG 噪音；其自身写日志会再次被检测到形成循环）
     logging.getLogger("watchfiles").setLevel(logging.WARNING)
 
-    log_format = os.getenv("LOG_FORMAT", "text").lower()
     formatter: logging.Formatter = JsonFormatter() if log_format == "json" else TextFormatter()
 
     console_handler = logging.StreamHandler()
