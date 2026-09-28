@@ -23,8 +23,11 @@ data/**
 !data/ml/
 !data/ml/**
 
-models/
-rerankers/
-
+models/**
+!models/system/
+!models/system/.gitkeep
+rerankers/**
+!rerankers/
+!rerankers/.gitkeep
 temp/**
 
