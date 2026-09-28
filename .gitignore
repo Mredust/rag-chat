@@ -4,10 +4,6 @@ __pycache__/
 *.sqlite3
 .env
 uploads/
-/models
-data/*
-!data/sample/
-!data/sample/sample_rag.txt
 .venv/
 venv/
 .pytest_cache/
@@ -18,7 +14,17 @@ logs/
 .idea/
 *.tsbuildinfo
 
-/docs
-rerankers
-temp/
-/test/output
+# custom
+data/**
+!data/datasets/
+!data/datasets/**
+!data/knowledges/
+!data/knowledges/**
+!data/ml/
+!data/ml/**
+
+models/
+rerankers/
+
+temp/**
+
