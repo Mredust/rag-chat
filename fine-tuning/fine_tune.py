@@ -286,7 +286,7 @@ def _write_import_sql(args, lines: list[str], result: dict, elapsed_total: float
         f"  ('{task_id}', '{_sql_escape(args.task_name)}', 'L2', 'sft', '{_sql_escape(args.base_model_name)}', "
         f"NULL, {args.valid_ratio},\n"
         f"   '{_sql_escape(json.dumps(config, ensure_ascii=False))}', '{_sql_escape(args.output_name)}', 'done', "
-        f"'{_sql_escape(args.db_output_dir)}', '{_sql_escape('\\n'.join(lines))}', "
+        f"'{_sql_escape(args.db_output_dir)}', '{_sql_escape('\n'.join(lines))}', "
         f"'{_sql_escape(json.dumps(metrics, ensure_ascii=False))}', '{created_at}', '{created_at}');\n",
         encoding="utf-8",
     )
