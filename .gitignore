@@ -31,3 +31,4 @@ rerankers/**
 !rerankers/.gitkeep
 temp/**
 
+!fine-tuning/.env
